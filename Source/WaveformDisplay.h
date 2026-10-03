@@ -13,6 +13,11 @@ public:
                   const std::vector<float>& outMin, const std::vector<float>& outMax);
     void clear();
 
+    // Moves the playhead line to a 0..1 fraction of the track's length, or
+    // pass a negative value to hide it. Called continuously during
+    // playback so the line actually tracks the transport.
+    void setPlayheadPosition (float normalized);
+
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
@@ -26,6 +31,7 @@ private:
     void seekFromMouse (const juce::MouseEvent& e);
     std::vector<float> inputMin, inputMax, outputMin, outputMax;
     bool hasData = false;
+    float playheadPosition = -1.0f;
 
     void drawStrip (juce::Graphics& g, juce::Rectangle<float> area, const juce::String& label,
                      const std::vector<float>& mn, const std::vector<float>& mx, juce::Colour colour) const;

@@ -31,6 +31,13 @@ public:
     // No-op if nothing is loaded yet.
     void seekToNormalizedPosition (float normalizedX);
 
+    // Current playback position as a 0..1 fraction of the loaded file's
+    // length, for driving a moving playhead on the waveform -- or -1 if
+    // nothing is loaded yet (no playhead to show). Reflects the position
+    // even while paused/stopped, so the playhead freezes in place rather
+    // than disappearing.
+    float getNormalizedPosition() const;
+
     void resized() override;
 
 private:

@@ -81,6 +81,13 @@ MainComponent::MainComponent()
     addAndMakeVisible (creditLabel);
 
     updateHeight();
+
+    startTimerHz (30); // drives the waveform playhead; see timerCallback()
+}
+
+void MainComponent::timerCallback()
+{
+    waveformDisplay.setPlayheadPosition (audioPlayer.getNormalizedPosition());
 }
 
 void MainComponent::toggleDetails()
@@ -88,7 +95,10 @@ void MainComponent::toggleDetails()
     detailsExpanded = ! detailsExpanded;
     detailsPanel.setVisible (detailsExpanded);
     if (detailsExpanded)
+    {
         detailsPanel.toFront (false); // float above everything else, not just whatever was added after it
+        detailsToggleButton.toFront (false); // ...but the close control stays clickable above it
+    }
     detailsToggleButton.setButtonText (detailsExpanded ? "Hide details  v" : "More details  >");
     resized();
 }
@@ -202,8 +212,10 @@ void MainComponent::resized()
     // The details overlay floats over this whole area (see below) instead
     // of pushing the layout down, so it's captured before anything below
     // consumes "inner" -- otherwise its bounds would shrink to whatever
-    // happened to be left over.
-    auto overlayBounds = inner;
+    // happened to be left over. Trimmed down from the very top so it never
+    // covers the "More details" toggle itself (which sits right there,
+    // and needs to stay clickable so you can close the overlay again).
+    auto overlayBounds = inner.withTrimmedTop (40);
 
     // --- Two columns side by side: controls on the left, the visual
     // (waveform + A/B) on the right -- a wide, plugin-like layout instead

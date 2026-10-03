@@ -172,6 +172,18 @@ void AudioPlayer::seekToNormalizedPosition (float normalizedX)
     transportSource.start();
 }
 
+float AudioPlayer::getNormalizedPosition() const
+{
+    if (readerSource == nullptr)
+        return -1.0f;
+
+    const double lengthSeconds = transportSource.getLengthInSeconds();
+    if (lengthSeconds <= 0.0)
+        return -1.0f;
+
+    return (float) juce::jlimit (0.0, 1.0, transportSource.getCurrentPosition() / lengthSeconds);
+}
+
 void AudioPlayer::stop()
 {
     transportSource.stop();

@@ -9,7 +9,8 @@
 #include "WaveformDisplay.h"
 
 class MainComponent : public juce::Component,
-                       public juce::FileDragAndDropTarget
+                       public juce::FileDragAndDropTarget,
+                       private juce::Timer
 {
 public:
     MainComponent();
@@ -30,6 +31,11 @@ public:
     std::function<void()> onNativeSizeChanged;
 
 private:
+    // Drives the moving playhead on the waveform during playback (see
+    // AudioPlayer::getNormalizedPosition()). Cheap no-op when nothing is
+    // loaded or playing.
+    void timerCallback() override;
+
     void chooseInputFile();
     void loadInputFile (const juce::File& file);
     void runProcessing();

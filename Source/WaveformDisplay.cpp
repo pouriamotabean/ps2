@@ -2,6 +2,7 @@
 #include "PSTheme.h"
 #include "PSSkin.h"
 #include "PSFonts.h"
+#include <cmath>
 
 WaveformDisplay::WaveformDisplay() = default;
 
@@ -18,7 +19,20 @@ void WaveformDisplay::setData (const std::vector<float>& inMin, const std::vecto
 void WaveformDisplay::clear()
 {
     hasData = false;
+    playheadPosition = -1.0f;
     setMouseCursor (juce::MouseCursor::NormalCursor);
+    repaint();
+}
+
+void WaveformDisplay::setPlayheadPosition (float normalized)
+{
+    // Called continuously (~30x/sec) during playback -- skip the repaint
+    // when the position hasn't meaningfully moved (paused/stopped) so this
+    // isn't needlessly redrawing every frame for nothing.
+    if (std::abs (normalized - playheadPosition) < 0.0005f)
+        return;
+
+    playheadPosition = normalized;
     repaint();
 }
 
@@ -94,4 +108,20 @@ void WaveformDisplay::paint (juce::Graphics& g)
 
     drawStrip (g, topStrip, "ORIGINAL", inputMin, inputMax, PSColours::textDim.withAlpha (0.9f));
     drawStrip (g, botStrip, "PROCESSED", outputMin, outputMax, PSColours::accentHi);
+
+    // Playhead: a single bright line across both strips, in the same
+    // coordinate space seekFromMouse() uses, so it lines up exactly with
+    // where a click would land.
+    if (playheadPosition >= 0.0f)
+    {
+        auto fullArea = getLocalBounds().toFloat().reduced (14.0f, 10.0f);
+        const float x = fullArea.getX() + playheadPosition * fullArea.getWidth();
+        g.setColour (juce::Colours::white.withAlpha (0.9f));
+        g.drawVerticalLine ((int) x, fullArea.getY(), fullArea.getBottom());
+
+        juce::Path head;
+        head.addTriangle (x - 4.0f, fullArea.getY(), x + 4.0f, fullArea.getY(), x, fullArea.getY() + 6.0f);
+        g.setColour (juce::Colours::white);
+        g.fillPath (head);
+    }
 }

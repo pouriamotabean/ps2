@@ -1,0 +1,43 @@
+name: Build PS (Windows)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch: {}
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout PS
+        uses: actions/checkout@v4
+
+      - name: Clone JUCE
+        run: git clone --depth 1 --branch master https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Configure (CMake)
+        run: cmake -B build -A x64
+
+      - name: Build (Release)
+        run: cmake --build build --config Release --parallel -- "/clp:ErrorsOnly;Summary"
+
+      - name: Locate built exe
+        id: locate
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path build -Recurse -Filter "PS.exe" | Select-Object -First 1
+          if (-not $exe) { throw "PS.exe not found in build output" }
+          echo "exePath=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "${{ steps.locate.outputs.exePath }}" -Destination "dist\PS.exe"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PS-Windows
+          path: dist\PS.exe

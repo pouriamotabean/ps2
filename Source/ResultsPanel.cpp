@@ -56,9 +56,26 @@ static juce::String verdictPrefix (VerdictSeverity s)
     }
 }
 
+// A lower streaming-quality tier inherently loses more to the codec --
+// that's correct, expected behaviour (it's genuinely what that Spotify
+// tier sounds like), not a sign of bad mastering. So the same dB of
+// sample-peak/true-peak overshoot or HF loss is "normal" at Low and
+// "unusual" at V.High. These scale the post-codec thresholds below by
+// tier so only loss beyond what that tier's own codec physics already
+// explains gets flagged -- NOT the limiter-reduction check, which happens
+// before encoding and has nothing to do with the chosen quality tier.
+static double codecToleranceScale (int qualityKbps)
+{
+    if (qualityKbps <= 24)  return 2.5;  // Low
+    if (qualityKbps <= 96)  return 1.6;  // Normal
+    if (qualityKbps <= 160) return 1.2;  // High
+    return 1.0;                          // V.High -- baseline, tightest
+}
+
 static std::vector<VerdictItem> buildVerdict (const SpotifyProcessor::Report& r)
 {
     std::vector<VerdictItem> items;
+    const double tol = codecToleranceScale (r.qualityKbps);
 
     // The processing chain already enforces a hard "never exceed 0 dBFS
     // going into the encoder" safety net (see SpotifyProcessor::process,
@@ -66,42 +83,41 @@ static std::vector<VerdictItem> buildVerdict (const SpotifyProcessor::Report& r)
     // measured AFTER the real Ogg Vorbis decode is therefore pure lossy-
     // codec reconstruction overshoot -- a normal, expected artifact of any
     // lossy codec (Spotify's own encoding included), not something the
-    // user's master did wrong. A sliver of overshoot (well under 1 dB) is
-    // universal and inaudible; only a genuinely large overshoot is worth a
-    // flag. These thresholds were previously far too tight (0.05 dBFS),
-    // which fired "GO REDO THIS" on essentially every normally-loud file.
-    if (r.outputSamplePeak > 1.0)
+    // user's master did wrong. A sliver of overshoot is universal and
+    // inaudible; only a genuinely large overshoot (relative to what this
+    // quality tier normally produces) is worth a flag.
+    if (r.outputSamplePeak > 1.0 * tol)
         items.push_back ({ "The delivered file measures a real sample-peak over ("
                                 + juce::String (r.outputSamplePeak, 1) + " dBFS) after the codec round trip - "
                                 + "this is large enough to risk audible distortion.",
                             VerdictSeverity::critical });
-    else if (r.outputSamplePeak > 0.3)
+    else if (r.outputSamplePeak > 0.3 * tol)
         items.push_back ({ "The delivered file has a small sample-peak over ("
                                 + juce::String (r.outputSamplePeak, 1) + " dBFS) after the codec round trip - "
-                                + "likely inaudible, but a bit more than the usual codec overshoot.",
+                                + "likely inaudible, but a bit more than usual for this quality tier.",
                             VerdictSeverity::warn });
-    // Below 0.3 dBFS: normal lossy-codec reconstruction overshoot, not worth a note.
+    // Below that: normal lossy-codec reconstruction overshoot for this tier, not worth a note.
 
     // Inter-sample ("true") peak overs in the delivered file. A small
     // overshoot after a lossy encode is expected and not a real clipping
     // risk on virtually all modern playback gear; only a clearly large
     // overshoot is flagged.
-    if (r.outputTruePeak > 2.0)
+    if (r.outputTruePeak > 2.0 * tol)
         items.push_back ({ "True peak in the delivered file is "
                                 + juce::String (r.outputTruePeak, 1)
                                 + " dBTP - likely to clip on real playback hardware.",
                             VerdictSeverity::critical });
-    else if (r.outputTruePeak > 1.0)
+    else if (r.outputTruePeak > 1.0 * tol)
         items.push_back ({ "True peak in the delivered file is "
                                 + juce::String (r.outputTruePeak, 1)
                                 + " dBTP - some risk of clipping on certain playback gear.",
                             VerdictSeverity::bad });
-    else if (r.outputTruePeak > 0.3)
+    else if (r.outputTruePeak > 0.3 * tol)
         items.push_back ({ "True peak in the delivered file is "
                                 + juce::String (r.outputTruePeak, 1)
-                                + " dBTP - a bit more than the usual codec overshoot, but low risk.",
+                                + " dBTP - a bit more than usual for this quality tier, but low risk.",
                             VerdictSeverity::warn });
-    // Below 0.3 dBTP: normal lossy-codec reconstruction overshoot, not worth a note.
+    // Below that: normal lossy-codec reconstruction overshoot for this tier, not worth a note.
 
     // Limiter gain reduction: how much the loudness boost actually reshaped
     // the dynamics. Thresholds are about audible severity, not taste.
@@ -140,15 +156,15 @@ static std::vector<VerdictItem> buildVerdict (const SpotifyProcessor::Report& r)
         if (count > 0)
         {
             const double avgDiff = sumDiff / (double) count;
-            if (avgDiff < -6.0)
+            if (avgDiff < -6.0 * tol)
                 items.push_back ({ "Frequencies above 10kHz lost about " + juce::String (-avgDiff, 1)
                                         + " dB to the codec - likely audibly duller.",
                                     VerdictSeverity::bad });
-            else if (avgDiff < -3.0)
+            else if (avgDiff < -3.0 * tol)
                 items.push_back ({ "Frequencies above 10kHz lost about " + juce::String (-avgDiff, 1)
-                                        + " dB to the codec - a bit more than usual.",
+                                        + " dB to the codec - a bit more than usual for this quality tier.",
                                     VerdictSeverity::warn });
-            // Smaller than that is just normal lossy-codec rolloff -- not worth a note.
+            // Smaller than that is normal rolloff for this quality tier -- not worth a note.
         }
     }
 

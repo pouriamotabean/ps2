@@ -26,14 +26,22 @@ public:
     // handle is still open (e.g. on Windows).
     void stop();
 
+    // Jumps playback to a position given as a 0..1 fraction of the
+    // currently-loaded file's length (e.g. from a click on the waveform).
+    // No-op if nothing is loaded yet.
+    void seekToNormalizedPosition (float normalizedX);
+
     void resized() override;
 
 private:
+    enum class Playing { none, original, processed, difference };
+
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
     void playOriginal();
     void playProcessed();
     void playDifference();
-    void loadIntoTransport (const juce::File& file, float gain);
+    void switchTo (const juce::File& file, float gain, Playing which, const juce::String& statusText);
+    void loadIntoTransport (const juce::File& file, float gain, double startPositionSeconds);
 
     juce::AudioFormatManager formatManager;
     juce::AudioDeviceManager deviceManager;
@@ -52,7 +60,6 @@ private:
     juce::TextButton stopButton { "Stop" };
     juce::Label statusLabel;
 
-    enum class Playing { none, original, processed, difference };
     Playing currentlyPlaying = Playing::none;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPlayer)

@@ -59,10 +59,16 @@ void DetailsPanel::drawRow (juce::Graphics& g, juce::Rectangle<int> area, const 
 
 void DetailsPanel::paint (juce::Graphics& g)
 {
+    // This panel floats as an overlay on top of the rest of the UI (see
+    // MainComponent::toggleDetails()) rather than pushing the layout down,
+    // so it needs to visibly separate itself from whatever's behind it: a
+    // slightly brighter/more elevated fill than ordinary panels, a real
+    // glow, and a crisper accent border.
     auto bounds = getLocalBounds().toFloat();
-    PSSkin::drawGlowRoundedRect (g, bounds, 10.0f, PSColours::raised.brighter (0.04f), PSColours::raised.darker (0.08f), PSColours::raised, 0.0f);
-    g.setColour (PSColours::border);
-    g.drawRoundedRectangle (bounds.reduced (0.5f), 10.0f, 1.0f);
+    PSSkin::drawGlowRoundedRect (g, bounds, 14.0f, PSColours::raised2.brighter (0.05f),
+                                  PSColours::raised2.darker (0.08f), PSColours::accentHi, 0.35f);
+    g.setColour (PSColours::accentHi.withAlpha (0.55f));
+    g.drawRoundedRectangle (bounds.reduced (0.5f), 14.0f, 1.4f);
 
     auto area = getLocalBounds().reduced (18, 12);
 

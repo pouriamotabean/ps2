@@ -14,8 +14,16 @@ public:
     void clear();
 
     void paint (juce::Graphics& g) override;
+    void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
+
+    // Fired with a 0..1 fraction of the track's length whenever the user
+    // clicks or drags on the waveform, so playback can jump there right
+    // away instead of waiting for the transport to reach that point.
+    std::function<void (float)> onSeek;
 
 private:
+    void seekFromMouse (const juce::MouseEvent& e);
     std::vector<float> inputMin, inputMax, outputMin, outputMax;
     bool hasData = false;
 

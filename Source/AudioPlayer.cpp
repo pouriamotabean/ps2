@@ -93,7 +93,7 @@ void AudioPlayer::reset()
     statusLabel.setText ("Process a file to enable A/B playback.", juce::dontSendNotification);
 }
 
-void AudioPlayer::loadIntoTransport (const juce::File& file, float gain)
+void AudioPlayer::loadIntoTransport (const juce::File& file, float gain, double startPositionSeconds)
 {
     transportSource.stop();
     transportSource.setSource (nullptr);
@@ -109,38 +109,67 @@ void AudioPlayer::loadIntoTransport (const juce::File& file, float gain)
     readerSource = std::make_unique<juce::AudioFormatReaderSource> (reader, true);
     transportSource.setSource (readerSource.get(), 32768, &readAheadThread, reader->sampleRate);
     transportSource.setGain (gain);
-    transportSource.setPosition (0.0);
+
+    // Clamp to the new file's own length -- the three files (original,
+    // processed, difference) aren't always exactly the same duration, so
+    // a position near the end of a longer one could otherwise be past the
+    // end of a shorter one.
+    const double lengthSeconds = reader->sampleRate > 0.0
+        ? (double) reader->lengthInSamples / reader->sampleRate : 0.0;
+    transportSource.setPosition (juce::jlimit (0.0, lengthSeconds, startPositionSeconds));
+}
+
+// Shared by playOriginal/playProcessed/playDifference: switching between
+// A/B/C keeps the current playback position (and keeps playing) instead
+// of jumping back to the start, so you can actually A/B a specific moment
+// in the track rather than always comparing from 0:00.
+void AudioPlayer::switchTo (const juce::File& file, float gain, Playing which, const juce::String& statusText)
+{
+    if (! file.existsAsFile())
+        return;
+
+    const double position = transportSource.getCurrentPosition();
+    loadIntoTransport (file, gain, position);
+    transportSource.start();
+    currentlyPlaying = which;
+    statusLabel.setText (statusText, juce::dontSendNotification);
 }
 
 void AudioPlayer::playOriginal()
 {
-    if (! originalFile.existsAsFile())
-        return;
-    loadIntoTransport (originalFile, originalGain);
-    transportSource.start();
-    currentlyPlaying = Playing::original;
-    statusLabel.setText ("Playing: Original (level-matched)", juce::dontSendNotification);
+    switchTo (originalFile, originalGain, Playing::original, "Playing: Original (level-matched)");
 }
 
 void AudioPlayer::playProcessed()
 {
-    if (! processedFile.existsAsFile())
-        return;
-    loadIntoTransport (processedFile, 1.0f);
-    transportSource.start();
-    currentlyPlaying = Playing::processed;
-    statusLabel.setText ("Playing: Simulated (processed)", juce::dontSendNotification);
+    switchTo (processedFile, 1.0f, Playing::processed, "Playing: Simulated (processed)");
 }
 
 void AudioPlayer::playDifference()
 {
-    if (! differenceFile.existsAsFile())
+    switchTo (differenceFile, 1.0f, Playing::difference,
+              "Playing: Difference (boosted +" + juce::String (differenceBoostDb, 1) + " dB to be audible)");
+}
+
+void AudioPlayer::seekToNormalizedPosition (float normalizedX)
+{
+    if (readerSource == nullptr)
+    {
+        // Nothing loaded yet -- a click on the waveform before any A/B
+        // button has been pressed starts the processed/simulated track
+        // (what the waveform shows "live" against the original) right
+        // from that point, rather than doing nothing.
+        if (! processedFile.existsAsFile())
+            return;
+        switchTo (processedFile, 1.0f, Playing::processed, "Playing: Simulated (processed)");
+    }
+
+    const double lengthSeconds = transportSource.getLengthInSeconds();
+    if (lengthSeconds <= 0.0)
         return;
-    loadIntoTransport (differenceFile, 1.0f);
+
+    transportSource.setPosition (juce::jlimit (0.0, lengthSeconds, (double) normalizedX * lengthSeconds));
     transportSource.start();
-    currentlyPlaying = Playing::difference;
-    statusLabel.setText ("Playing: Difference (boosted +" + juce::String (differenceBoostDb, 1)
-                              + " dB to be audible)", juce::dontSendNotification);
 }
 
 void AudioPlayer::stop()

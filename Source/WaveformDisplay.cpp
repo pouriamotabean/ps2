@@ -11,14 +11,34 @@ void WaveformDisplay::setData (const std::vector<float>& inMin, const std::vecto
     inputMin = inMin; inputMax = inMax;
     outputMin = outMin; outputMax = outMax;
     hasData = ! inputMin.empty() && ! outputMin.empty();
+    setMouseCursor (hasData ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
     repaint();
 }
 
 void WaveformDisplay::clear()
 {
     hasData = false;
+    setMouseCursor (juce::MouseCursor::NormalCursor);
     repaint();
 }
+
+void WaveformDisplay::seekFromMouse (const juce::MouseEvent& e)
+{
+    if (! hasData || onSeek == nullptr)
+        return;
+
+    // Same reduced() margin paint() uses for the plotted area, so a click
+    // lines up with what's actually drawn under the cursor.
+    auto area = getLocalBounds().toFloat().reduced (14.0f, 10.0f);
+    if (area.getWidth() <= 0.0f)
+        return;
+
+    const float normalized = juce::jlimit (0.0f, 1.0f, (float) (e.position.x - area.getX()) / area.getWidth());
+    onSeek (normalized);
+}
+
+void WaveformDisplay::mouseDown (const juce::MouseEvent& e) { seekFromMouse (e); }
+void WaveformDisplay::mouseDrag (const juce::MouseEvent& e) { seekFromMouse (e); }
 
 void WaveformDisplay::drawStrip (juce::Graphics& g, juce::Rectangle<float> area, const juce::String& label,
                                   const std::vector<float>& mn, const std::vector<float>& mx, juce::Colour colour) const

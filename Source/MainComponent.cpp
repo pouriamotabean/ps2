@@ -58,6 +58,7 @@ MainComponent::MainComponent()
     addAndMakeVisible (saveAsButton);
 
     addAndMakeVisible (resultsPanel);
+    waveformDisplay.onSeek = [this] (float normalizedX) { audioPlayer.seekToNormalizedPosition (normalizedX); };
     addAndMakeVisible (waveformDisplay);
     addAndMakeVisible (audioPlayer);
 
@@ -86,8 +87,10 @@ void MainComponent::toggleDetails()
 {
     detailsExpanded = ! detailsExpanded;
     detailsPanel.setVisible (detailsExpanded);
+    if (detailsExpanded)
+        detailsPanel.toFront (false); // float above everything else, not just whatever was added after it
     detailsToggleButton.setButtonText (detailsExpanded ? "Hide details  v" : "More details  >");
-    updateHeight();
+    resized();
 }
 
 bool MainComponent::isInterestedInFileDrag (const juce::StringArray& files)
@@ -196,6 +199,12 @@ void MainComponent::resized()
     area.removeFromTop (18);
     auto inner = area.reduced (22, 18);
 
+    // The details overlay floats over this whole area (see below) instead
+    // of pushing the layout down, so it's captured before anything below
+    // consumes "inner" -- otherwise its bounds would shrink to whatever
+    // happened to be left over.
+    auto overlayBounds = inner;
+
     // --- Two columns side by side: controls on the left, the visual
     // (waveform + A/B) on the right -- a wide, plugin-like layout instead
     // of one long vertical stack. Both columns share one row whose height
@@ -230,7 +239,12 @@ void MainComponent::resized()
 
     // Right column --------------------------------------------------------
     auto waveHeader = right.removeFromTop (20);
-    detailsToggleButton.setBounds (waveHeader.removeFromRight (130));
+    // The toggle's font scales with its own bounds height (see
+    // PSLookAndFeel::getTextButtonFont), so it's given a taller box than
+    // the 20px label row to read clearly -- centred on that row rather
+    // than confined to it.
+    auto toggleArea = waveHeader.removeFromRight (170).withSizeKeepingCentre (170, 40);
+    detailsToggleButton.setBounds (toggleArea);
     waveformSectionLabel.setBounds (waveHeader);
     right.removeFromTop (6);
     waveformDisplay.setBounds (right.removeFromTop (150));
@@ -247,12 +261,13 @@ void MainComponent::resized()
     resultsPanel.setBounds (inner.removeFromTop (resultsPanel.getPreferredHeight()));
 
     // Everything numeric lives behind the "More details" link above,
-    // closed by default -- when open it unfolds here, also full width.
+    // closed by default. When open it floats on top of everything else in
+    // this panel (see toggleDetails(), which brings it to front) rather
+    // than pushing the window taller -- a card dropped over the content,
+    // not a reflow.
     if (detailsExpanded)
-    {
-        inner.removeFromTop (14);
-        detailsPanel.setBounds (inner.removeFromTop (DetailsPanel::kPreferredHeight));
-    }
+        detailsPanel.setBounds (overlayBounds.removeFromTop (
+            juce::jmin (DetailsPanel::kPreferredHeight, overlayBounds.getHeight())));
 
     creditLabel.setBounds (getLocalBounds().removeFromBottom (24));
 }
@@ -260,8 +275,10 @@ void MainComponent::resized()
 void MainComponent::updateHeight()
 {
     // Mirrors the block order in resized(): header, the two-column row
-    // (sized to whichever column is taller), the verdict, optionally the
-    // details panel, and the credit line.
+    // (sized to whichever column is taller), the verdict, and the credit
+    // line. The details panel is a floating overlay (see resized()) and
+    // deliberately does NOT affect this -- toggling it never resizes the
+    // window.
     int h = 18                              // top margin
           + 70 + 18                         // header + gap
           + 18                              // inner reduced top
@@ -269,9 +286,6 @@ void MainComponent::updateHeight()
           + 18 + resultsPanel.getPreferredHeight()
           + 18                              // inner reduced bottom margin
           + 24;                             // credit label
-
-    if (detailsExpanded)
-        h += 14 + DetailsPanel::kPreferredHeight;
 
     setSize (kNativeWidth, h);
 

@@ -5,6 +5,33 @@
 #include <cmath>
 #include <vector>
 
+// Fixed native/design width -- the whole UI is scaled as one unit by the
+// host window (see Main.cpp's ScaleHost), not reflowed, so layout never
+// needs to track the window's actual current width/height.
+static constexpr int kNativeWidth = 960;
+static constexpr int kLeftColumnWidth = 300;
+static constexpr int kColumnGap = 24;
+
+// Header: icon + big title + small tracked caption, all vertically centred
+// in one row (see resized()), with a subtle divider under the whole thing.
+static constexpr int kHeaderHeight = 80;
+
+// Height of the left column's own content (load row through status
+// label), used both to lay it out and, via jmax with the right column,
+// to size the shared row both columns sit in. The three control groups
+// (file picker, Target, Quality, Process/Save) are spaced progressively
+// more generously top-to-bottom -- less gap right under the file picker,
+// more breathing room between the groups themselves -- per request.
+static constexpr int kLeftColumnHeight =
+      40 + 6 + 18 + 10        // load button + file label + gap
+    + 15 + 6 + 52 + 22        // target section
+    + 15 + 6 + 52 + 24        // quality section
+    + 44 + 10 + 16;           // process/save row + gap + status label
+
+static constexpr int kRightColumnHeight =
+      20 + 6 + 150             // waveform header (+ "More details" link) + waveform
+    + 16 + 15 + 6 + 64;        // A/B listen
+
 MainComponent::MainComponent()
     : targetControl ({ { "Loud", "-11 LUFS" }, { "Normal", "-14 LUFS" }, { "Quiet", "-19 LUFS" } }),
       qualityControl ({ { "Low", "24 kbps" }, { "Normal", "96 kbps" }, { "High", "160 kbps" }, { "V.High", "320 kbps" } })
@@ -12,15 +39,27 @@ MainComponent::MainComponent()
     setLookAndFeel (&lookAndFeel);
     setSize (960, 600); // final size recomputed by updateHeight() below
 
+    // Header: icon mark on the left, "Predict Spotify" as the big title next
+    // to it, and a small tracked caption underneath -- per the design spec
+    // (icon + title were previously stacked vertically; the spec puts the
+    // title beside the icon instead, with the caption taking the old
+    // "Predict Spotify" subtitle's place below).
     titleLogo.setImage (PSSkin::logoImage());
     titleLogo.setImagePlacement (juce::RectanglePlacement (juce::RectanglePlacement::xLeft
                                                              | juce::RectanglePlacement::yMid
                                                              | juce::RectanglePlacement::onlyReduceInSize));
     addAndMakeVisible (titleLogo);
 
-    subtitleLabel.setText ("Predict Spotify", juce::dontSendNotification);
-    subtitleLabel.setFont (PSFonts::ui (15.0f, false));
+    titleLabel.setText ("Predict Spotify", juce::dontSendNotification);
+    titleLabel.setFont (PSFonts::ui (23.0f, false));
+    titleLabel.setColour (juce::Label::textColourId, PSColours::text);
+    titleLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (titleLabel);
+
+    subtitleLabel.setText ("MASTER  \xc2\xb7  ANALYZE  \xc2\xb7  STREAM", juce::dontSendNotification);
+    subtitleLabel.setFont (PSFonts::ui (10.5f, false).withExtraKerningFactor (0.12f));
     subtitleLabel.setColour (juce::Label::textColourId, PSColours::textDim);
+    subtitleLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (subtitleLabel);
 
     loadButton.onClick = [this] { chooseInputFile(); };
@@ -33,13 +72,18 @@ MainComponent::MainComponent()
 
     auto setupSectionLabel = [] (juce::Label& l)
     {
-        l.setFont (PSFonts::ui (12.0f, true));
+        l.setFont (PSFonts::ui (12.5f, true).withExtraKerningFactor (0.1f));
         l.setColour (juce::Label::textColourId, PSColours::gold);
     };
     setupSectionLabel (targetSectionLabel);
     setupSectionLabel (qualitySectionLabel);
     setupSectionLabel (abSectionLabel);
     setupSectionLabel (waveformSectionLabel);
+    // Target/Quality read as centred headings flanked by divider lines (see
+    // drawSectionDividers() in paint()); the two right-column headers stay
+    // left-aligned with a single trailing line instead, matching the spec.
+    targetSectionLabel.setJustificationType (juce::Justification::centred);
+    qualitySectionLabel.setJustificationType (juce::Justification::centred);
     addAndMakeVisible (targetSectionLabel);
     addAndMakeVisible (qualitySectionLabel);
     addAndMakeVisible (abSectionLabel);
@@ -236,26 +280,65 @@ void MainComponent::paint (juce::Graphics& g)
     if (noiseImage.isValid())
         g.drawImageAt (noiseImage, 0, 0);
 
-    auto panelBounds = getLocalBounds().reduced (18).withTrimmedTop (88).toFloat();
-    PSSkin::drawGlowRoundedRect (g, panelBounds, 14.0f, PSColours::panel.brighter (0.03f),
+    auto panelBounds = getLocalBounds().reduced (18).withTrimmedTop (18 + kHeaderHeight).toFloat();
+    PSSkin::drawGlowRoundedRect (g, panelBounds, 20.0f, PSColours::panel.brighter (0.03f),
                                   PSColours::panel.darker (0.1f), PSColours::panel, 0.0f);
     g.setColour (PSColours::border);
-    g.drawRoundedRectangle (panelBounds, 14.0f, 1.0f);
-
-    auto markBounds = juce::Rectangle<float> (18.0f, 26.0f, 8.0f, 34.0f);
-    juce::ColourGradient grad (PSColours::accentHi, markBounds.getX(), markBounds.getY(),
-                                PSColours::accent, markBounds.getX(), markBounds.getBottom(), false);
-    g.setGradientFill (grad);
-    g.fillRoundedRectangle (markBounds, 3.0f);
+    g.drawRoundedRectangle (panelBounds, 20.0f, 1.0f);
 
     if (isDragHover)
     {
         g.setColour (PSColours::accentHi.withAlpha (0.9f));
-        g.drawRoundedRectangle (panelBounds.reduced (2.0f), 14.0f, 2.5f);
+        g.drawRoundedRectangle (panelBounds.reduced (2.0f), 20.0f, 2.5f);
         g.setFont (PSFonts::ui (18.0f, true));
         g.setColour (PSColours::accentHi);
         g.drawText ("Drop audio file to load", panelBounds, juce::Justification::centred);
     }
+
+    // Header: subtle divider under the icon+title row, and a small
+    // low-contrast waveform glyph top-right -- both per the design spec.
+    g.setColour (PSColours::border.withAlpha (0.6f));
+    g.drawHorizontalLine (headerDividerBounds.getY(), (float) headerDividerBounds.getX(),
+                           (float) headerDividerBounds.getRight());
+    PSSkin::drawIcon (g, headerRightIconBounds.toFloat(), PSSkin::Icon::waveform, PSColours::textDim.withAlpha (0.7f));
+
+    // Target/Quality section headings read as centred text flanked by
+    // short divider lines (per spec); the right column's two headings stay
+    // left-aligned with one trailing line instead -- see each label's own
+    // setJustificationType() in the constructor for which is which.
+    auto drawFlankingDividers = [&] (const juce::Label& label)
+    {
+        auto bounds = label.getBounds().toFloat();
+        const float textW = juce::GlyphArrangement::getStringWidth (label.getFont(), label.getText());
+        const float pad = 14.0f;
+        const float cx = bounds.getCentreX();
+        const float y = bounds.getCentreY();
+        const float leftEnd = cx - textW * 0.5f - pad;
+        const float rightStart = cx + textW * 0.5f + pad;
+
+        g.setColour (PSColours::border);
+        if (leftEnd > bounds.getX())
+            g.drawHorizontalLine ((int) y, bounds.getX(), leftEnd);
+        if (rightStart < bounds.getRight())
+            g.drawHorizontalLine ((int) y, rightStart, bounds.getRight());
+    };
+    drawFlankingDividers (targetSectionLabel);
+    drawFlankingDividers (qualitySectionLabel);
+
+    auto drawTrailingDivider = [&] (const juce::Label& label, int rightEdge)
+    {
+        auto bounds = label.getBounds().toFloat();
+        const float textW = juce::GlyphArrangement::getStringWidth (label.getFont(), label.getText());
+        const float startX = bounds.getX() + textW + 14.0f;
+        const float y = bounds.getCentreY();
+        if (startX < (float) rightEdge)
+        {
+            g.setColour (PSColours::border);
+            g.drawHorizontalLine ((int) y, startX, (float) rightEdge);
+        }
+    };
+    drawTrailingDivider (waveformSectionLabel, detailsToggleButton.getBounds().getX() - 10);
+    drawTrailingDivider (abSectionLabel, waveformDisplay.getBounds().getRight());
 
     // Thin glowing dividers flanking the credit line, fading out toward
     // the edges -- a small finishing touch from the reference mockup.
@@ -278,36 +361,30 @@ void MainComponent::paint (juce::Graphics& g)
     }
 }
 
-// Fixed native/design width -- the whole UI is scaled as one unit by the
-// host window (see Main.cpp's ScaleHost), not reflowed, so layout never
-// needs to track the window's actual current width/height.
-static constexpr int kNativeWidth = 960;
-static constexpr int kLeftColumnWidth = 300;
-static constexpr int kColumnGap = 24;
-
-// Height of the left column's own content (load row through status
-// label), used both to lay it out and, via jmax with the right column,
-// to size the shared row both columns sit in.
-static constexpr int kLeftColumnHeight =
-      40 + 6 + 18 + 18        // load button + file label + gap
-    + 15 + 6 + 52 + 16        // target section
-    + 15 + 6 + 52 + 18        // quality section
-    + 44 + 10 + 16;           // process/save row + gap + status label
-
-static constexpr int kRightColumnHeight =
-      20 + 6 + 150             // waveform header (+ "More details" link) + waveform
-    + 16 + 15 + 6 + 64;        // A/B listen
-
 void MainComponent::resized()
 {
     generateNoiseImage(); // no-op if the size hasn't actually changed
 
     auto area = getLocalBounds().reduced (18);
 
-    auto header = area.removeFromTop (70);
+    auto header = area.removeFromTop (kHeaderHeight);
     header.removeFromLeft (20);
-    titleLogo.setBounds (header.removeFromTop (44).withWidth (160));
-    subtitleLabel.setBounds (header);
+    auto headerRight = header.removeFromRight (34);
+    headerRightIconBounds = headerRight.removeFromRight (20).withSizeKeepingCentre (20, 20);
+
+    auto iconBox = header.removeFromLeft (42).withSizeKeepingCentre (42, 42);
+    titleLogo.setBounds (iconBox);
+    header.removeFromLeft (14);
+
+    // Title + caption as one 42px-tall block, centred in the full header
+    // height so it lines up with the icon regardless of the header's own
+    // (slightly generous) height.
+    auto textBlock = header.withSizeKeepingCentre (header.getWidth(), 42);
+    titleLabel.setBounds (textBlock.removeFromTop (26));
+    textBlock.removeFromTop (2);
+    subtitleLabel.setBounds (textBlock);
+
+    headerDividerBounds = { 18, 18 + kHeaderHeight, getWidth() - 36, 1 };
 
     area.removeFromTop (18);
     auto inner = area.reduced (22, 18);
@@ -340,17 +417,17 @@ void MainComponent::resized()
     loadButton.setBounds (left.removeFromTop (40));
     left.removeFromTop (6);
     inputFileLabel.setBounds (left.removeFromTop (18));
-    left.removeFromTop (18);
+    left.removeFromTop (10);
 
     targetSectionLabel.setBounds (left.removeFromTop (15));
     left.removeFromTop (6);
     targetControl.setBounds (left.removeFromTop (52));
-    left.removeFromTop (16);
+    left.removeFromTop (22);
 
     qualitySectionLabel.setBounds (left.removeFromTop (15));
     left.removeFromTop (6);
     qualityControl.setBounds (left.removeFromTop (52));
-    left.removeFromTop (18);
+    left.removeFromTop (24);
 
     auto actionRow = left.removeFromTop (44);
     processButton.setBounds (actionRow.removeFromLeft (juce::roundToInt ((float) actionRow.getWidth() * 0.6f)));
@@ -420,7 +497,7 @@ void MainComponent::updateHeight()
     const int rightColumnTotalHeight = kRightColumnHeight + 18 + resultsPanelH;
 
     int h = 18                              // top margin
-          + 70 + 18                         // header + gap
+          + kHeaderHeight + 18              // header + gap
           + 18                              // inner reduced top
           + juce::jmax (kLeftColumnHeight, rightColumnTotalHeight)
           + 18                              // inner reduced bottom margin

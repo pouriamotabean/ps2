@@ -84,9 +84,9 @@ void WaveformDisplay::drawStrip (juce::Graphics& g, juce::Rectangle<float> area,
 void WaveformDisplay::paint (juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
-    PSSkin::drawGlowRoundedRect (g, bounds, 10.0f, PSColours::raised.brighter (0.04f), PSColours::raised.darker (0.08f), PSColours::raised, 0.0f);
+    PSSkin::drawGlowRoundedRect (g, bounds, 18.0f, PSColours::raised.brighter (0.04f), PSColours::raised.darker (0.08f), PSColours::raised, 0.0f);
     g.setColour (PSColours::border);
-    g.drawRoundedRectangle (bounds.reduced (0.5f), 10.0f, 1.0f);
+    g.drawRoundedRectangle (bounds.reduced (0.5f), 18.0f, 1.0f);
 
     auto area = getLocalBounds().toFloat().reduced (14.0f, 10.0f);
 

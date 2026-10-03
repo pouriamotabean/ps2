@@ -20,7 +20,7 @@ void PSLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& butto
                                            bool isHighlighted, bool isDown)
 {
     auto bounds = button.getLocalBounds().toFloat().reduced (0.5f);
-    const float radius = juce::jmin (10.0f, bounds.getHeight() * 0.3f);
+    const float radius = juce::jmin (16.0f, bounds.getHeight() * 0.3f); // spec: buttons ~15-17px radius
 
     auto base = backgroundColour;
     if (isDown)              base = base.darker (0.2f);

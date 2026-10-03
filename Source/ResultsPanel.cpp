@@ -298,14 +298,25 @@ int ResultsPanel::getPreferredHeight (int panelWidth) const
 void ResultsPanel::paint (juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
-    PSSkin::drawGlowRoundedRect (g, bounds, 14.0f, PSColours::raised.brighter (0.04f), PSColours::raised.darker (0.08f), PSColours::raised, 0.0f);
+    PSSkin::drawGlowRoundedRect (g, bounds, 18.0f, PSColours::raised.brighter (0.04f), PSColours::raised.darker (0.08f), PSColours::raised, 0.0f);
     g.setColour (PSColours::border);
-    g.drawRoundedRectangle (bounds.reduced (0.5f), 14.0f, 1.0f);
+    g.drawRoundedRectangle (bounds.reduced (0.5f), 18.0f, 1.0f);
 
     auto area = getLocalBounds().reduced (18, 12);
 
     if (! hasReport)
     {
+        // A plain "i" info glyph, matching the verdict icon's circular
+        // footprint -- keeps the idle state visually consistent with the
+        // real verdict icon that will replace it once there's a report.
+        const int iconSize = 28;
+        auto iconArea = area.removeFromLeft (iconSize).withSizeKeepingCentre (iconSize, iconSize).toFloat();
+        g.setColour (PSColours::textDim.withAlpha (0.6f));
+        g.drawEllipse (iconArea, 1.5f);
+        g.setFont (PSFonts::ui (13.0f, true));
+        g.drawText ("i", iconArea, juce::Justification::centred);
+        area.removeFromLeft (14);
+
         g.setFont (PSFonts::ui (14.0f, false));
         g.setColour (PSColours::textDim);
         g.drawFittedText (placeholderText, area, juce::Justification::centredLeft, 2);

@@ -54,8 +54,14 @@ private:
     PSLookAndFeel lookAndFeel;
 
     // --- Header -------------------------------------------------------
+    // Icon mark, then the big title next to it, with a small tracked
+    // caption underneath -- matches the user-supplied design spec's header
+    // (icon + "Predict Spotify" + "MASTER . ANALYZE . STREAM" beneath).
     juce::ImageComponent titleLogo;
+    juce::Label titleLabel;
     juce::Label subtitleLabel;
+    juce::Rectangle<int> headerRightIconBounds; // small waveform glyph, top-right -- drawn directly in paint()
+    juce::Rectangle<int> headerDividerBounds;   // full-width line under the header -- drawn directly in paint()
 
     // --- Input ----------------------------------------------------------
     juce::TextButton loadButton { "Choose WAV..." };
@@ -80,7 +86,7 @@ private:
 
     // --- Waveform (always visible - this is the one visual the minimal
     // view keeps front and center) ------------------------------------------
-    juce::Label waveformSectionLabel { {}, "WAVEFORM - BEFORE / AFTER" };
+    juce::Label waveformSectionLabel { {}, "WAVEFORM · BEFORE / AFTER" };
     WaveformDisplay waveformDisplay;
 
     // --- A/B playback -------------------------------------------------

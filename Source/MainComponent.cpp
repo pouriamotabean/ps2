@@ -155,6 +155,14 @@ void MainComponent::paint (juce::Graphics& g)
                                               PSColours::bg.darker (0.2f), 0.0f, (float) getHeight(), false));
     g.fillRect (getLocalBounds());
 
+    // Subtle radial vignette centred near the top -- a soft glow that
+    // falls off toward the edges, instead of a completely flat fill, for
+    // more depth (matches the reference mockup's background treatment).
+    juce::ColourGradient vignette (PSColours::accent.withAlpha (0.05f), (float) getWidth() * 0.5f, 0.0f,
+                                    PSColours::bg.withAlpha (0.0f), (float) getWidth() * 0.5f, (float) getHeight() * 0.7f, true);
+    g.setGradientFill (vignette);
+    g.fillRect (getLocalBounds());
+
     auto panelBounds = getLocalBounds().reduced (18).withTrimmedTop (88).toFloat();
     PSSkin::drawGlowRoundedRect (g, panelBounds, 14.0f, PSColours::panel.brighter (0.03f),
                                   PSColours::panel.darker (0.1f), PSColours::panel, 0.0f);
@@ -174,6 +182,26 @@ void MainComponent::paint (juce::Graphics& g)
         g.setFont (PSFonts::ui (18.0f, true));
         g.setColour (PSColours::accentHi);
         g.drawText ("Drop audio file to load", panelBounds, juce::Justification::centred);
+    }
+
+    // Thin glowing dividers flanking the credit line, fading out toward
+    // the edges -- a small finishing touch from the reference mockup.
+    {
+        auto creditArea = getLocalBounds().toFloat().removeFromBottom (24.0f);
+        const auto creditFont = PSFonts::ui (11.0f, false);
+        const float textHalfWidth = juce::GlyphArrangement::getStringWidth (creditFont, creditLabel.getText()) * 0.5f + 16.0f;
+        const float y = creditArea.getCentreY();
+        const float lineInset = 60.0f;
+
+        juce::ColourGradient leftGrad (PSColours::border.withAlpha (0.0f), lineInset, y,
+                                        PSColours::accent.withAlpha (0.5f), creditArea.getCentreX() - textHalfWidth, y, false);
+        g.setGradientFill (leftGrad);
+        g.drawHorizontalLine ((int) y, lineInset, creditArea.getCentreX() - textHalfWidth);
+
+        juce::ColourGradient rightGrad (PSColours::accent.withAlpha (0.5f), creditArea.getCentreX() + textHalfWidth, y,
+                                         PSColours::border.withAlpha (0.0f), creditArea.getWidth() - lineInset, y, false);
+        g.setGradientFill (rightGrad);
+        g.drawHorizontalLine ((int) y, creditArea.getCentreX() + textHalfWidth, creditArea.getWidth() - lineInset);
     }
 }
 
@@ -329,6 +357,7 @@ void MainComponent::loadInputFile (const juce::File& file)
     saveAsButton.setEnabled (false);
     inputFileLabel.setText (file.getFileName(), juce::dontSendNotification);
     resultsPanel.setPlaceholder ("Ready. Press \"Process\" to continue.");
+    statusLabel.setText ({}, juce::dontSendNotification); // clear any stale "Done"/"Error" from a previous file
     detailsPanel.clear();
     waveformDisplay.clear();
     audioPlayer.reset();

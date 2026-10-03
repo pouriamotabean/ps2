@@ -122,4 +122,67 @@ namespace PSSkin
         g.setGradientFill (grad);
         g.fillPath (p);
     }
+
+    void drawIcon (juce::Graphics& g, juce::Rectangle<float> box, Icon icon, juce::Colour colour)
+    {
+        if (icon == Icon::none)
+            return;
+
+        g.setColour (colour);
+        auto b = box.reduced (box.getWidth() * 0.08f, box.getHeight() * 0.08f);
+
+        switch (icon)
+        {
+            case Icon::waveform:
+            {
+                // Four bars of varying height, like a tiny level meter --
+                // echoes the "Choose WAV..." button's purpose at a glance.
+                const int numBars = 4;
+                const float gap = b.getWidth() * 0.12f;
+                const float barW = (b.getWidth() - gap * (numBars - 1)) / (float) numBars;
+                const float heights[numBars] = { 0.45f, 0.9f, 0.65f, 1.0f };
+                for (int i = 0; i < numBars; ++i)
+                {
+                    const float h = b.getHeight() * heights[(size_t) i];
+                    juce::Rectangle<float> bar (b.getX() + i * (barW + gap), b.getBottom() - h, barW, h);
+                    g.fillRoundedRectangle (bar, barW * 0.4f);
+                }
+                break;
+            }
+            case Icon::play:
+            {
+                juce::Path tri;
+                tri.addTriangle (b.getX(), b.getY(), b.getX(), b.getBottom(), b.getRight(), b.getCentreY());
+                g.fillPath (tri);
+                break;
+            }
+            case Icon::save:
+            {
+                // A minimal "save" glyph: a downward arrow into a tray --
+                // reads clearly at small sizes, unlike a detailed floppy disk.
+                const float stemX = b.getCentreX();
+                const float arrowTopY = b.getY();
+                const float arrowTipY = b.getY() + b.getHeight() * 0.62f;
+                const float headW = b.getWidth() * 0.34f;
+
+                juce::Path arrow;
+                arrow.startNewSubPath (stemX, arrowTopY);
+                arrow.lineTo (stemX, arrowTipY);
+                g.strokePath (arrow, juce::PathStrokeType (juce::jmax (1.6f, b.getWidth() * 0.14f),
+                                                             juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+                juce::Path head;
+                head.addTriangle (stemX - headW, arrowTipY - headW * 0.85f,
+                                   stemX + headW, arrowTipY - headW * 0.85f,
+                                   stemX, arrowTipY + headW * 0.15f);
+                g.fillPath (head);
+
+                juce::Rectangle<float> tray (b.getX(), b.getBottom() - b.getHeight() * 0.14f,
+                                              b.getWidth(), b.getHeight() * 0.14f);
+                g.fillRoundedRectangle (tray, tray.getHeight() * 0.5f);
+                break;
+            }
+            default: break;
+        }
+    }
 }

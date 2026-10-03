@@ -47,4 +47,11 @@ namespace PSSkin
     void drawGlowRoundedRect (juce::Graphics& g, juce::Rectangle<float> bounds, float cornerRadius,
                                juce::Colour topColour, juce::Colour bottomColour,
                                juce::Colour glowColour, float glowAlpha);
+
+    // Small leading glyphs drawn inside a few key buttons ("Choose WAV...",
+    // "Process", "Save As...") for a more premium, iconography-rich look,
+    // matching the reference mockup -- code-drawn so they always match the
+    // live theme colour, same reasoning as drawGlowRoundedRect above.
+    enum class Icon { none, waveform, play, save };
+    void drawIcon (juce::Graphics& g, juce::Rectangle<float> box, Icon icon, juce::Colour colour);
 }

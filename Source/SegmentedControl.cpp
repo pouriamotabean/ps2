@@ -49,7 +49,7 @@ void SegmentedControl::paint (juce::Graphics& g)
             auto pill = segB.reduced (3.0f);
             PSSkin::drawGlowRoundedRect (g, pill, juce::jmax (0.0f, radius - 3.0f),
                                           PSColours::accentHi, PSColours::accent,
-                                          PSColours::accentHi, 0.45f);
+                                          PSColours::accentHi, 0.55f);
         }
         else if (isHovered)
         {

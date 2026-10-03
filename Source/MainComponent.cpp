@@ -2,6 +2,8 @@
 #include "PSTheme.h"
 #include "PSSkin.h"
 #include "PSFonts.h"
+#include <cmath>
+#include <vector>
 
 MainComponent::MainComponent()
     : targetControl ({ { "Loud", "-11 LUFS" }, { "Normal", "-14 LUFS" }, { "Quiet", "-19 LUFS" } }),
@@ -90,12 +92,19 @@ void MainComponent::timerCallback()
     waveformDisplay.setPlayheadPosition (audioPlayer.getNormalizedPosition());
 }
 
-// A very subtle per-pixel grain, drawn once into a cached Image rather
-// than re-rolled every repaint (cheap to blend, not cheap to regenerate).
-// Kept as a plain random monochrome speckle rather than a baked texture
+// A brushed-metal texture, drawn once into a cached Image rather than
+// re-rolled every repaint. Kept procedural rather than a baked texture
 // asset -- same reasoning as every other visual in this app (PSSkin,
 // PSLookAndFeel): it has to stay pixel-crisp under the window's own
 // continuous AffineTransform scaling, which a stretched bitmap would not.
+//
+// Real brushed metal is mostly-horizontal fine scratches (long streaks of
+// slightly different brightness, smoothed so they blend into their
+// neighbours) plus a very slow diagonal sheen, like a reflection sweeping
+// across the surface, plus a little per-pixel sparkle on top. Composited
+// as light-only (near-black background + a lighter grey overlay at low,
+// varying alpha) since that's what reads as "a dark brushed panel", not
+// flat isotropic noise.
 void MainComponent::generateNoiseImage()
 {
     const int w = getWidth();
@@ -107,15 +116,41 @@ void MainComponent::generateNoiseImage()
 
     noiseImage = juce::Image (juce::Image::ARGB, w, h, true);
     juce::Image::BitmapData bitmap (noiseImage, juce::Image::BitmapData::writeOnly);
-    juce::Random rng (0x50530001);
+    juce::Random rng (0x50530002);
+
+    // One brightness value per row, smoothed across neighbouring rows so
+    // it reads as long horizontal scratches rather than per-pixel static.
+    std::vector<float> rowBrush ((size_t) h);
+    float prevRow = 0.0f;
+    for (int y = 0; y < h; ++y)
+    {
+        const float raw = rng.nextFloat() * 2.0f - 1.0f; // -1..1
+        prevRow = prevRow * 0.88f + raw * 0.12f;          // long streaks, not flicker
+        rowBrush[(size_t) y] = prevRow;
+    }
+
+    const float sheenPeriod = (float) juce::jmax (200, w + h) * 0.9f;
 
     for (int y = 0; y < h; ++y)
     {
+        const float brush = rowBrush[(size_t) y];
         for (int x = 0; x < w; ++x)
         {
-            const auto v = (juce::uint8) rng.nextInt (256);
-            const auto a = (juce::uint8) rng.nextInt (9); // 0-8 alpha -- barely there, just breaks up the flat gradient
-            bitmap.setPixelColour (x, y, juce::Colour (v, v, v, a));
+            const float sparkle = rng.nextFloat() * 2.0f - 1.0f; // per-pixel fine grain
+            const float sheen = std::sin ((float) (x + y) / sheenPeriod * juce::MathConstants<float>::twoPi);
+
+            // Only the brighter side of each term contributes -- brushed
+            // metal in a dark panel reads as faint light scratches on a
+            // dark base, not dark-and-light bands either side of grey.
+            const float highlight = juce::jmax (0.0f, brush) * 0.6f
+                                   + juce::jmax (0.0f, sheen) * 0.5f
+                                   + std::abs (sparkle) * 0.25f;
+
+            const int alpha = juce::jlimit (0, 20, 2 + (int) (highlight * 20.0f));
+            const int level = juce::jlimit (150, 255, 190 + (int) (sparkle * 30.0f));
+
+            bitmap.setPixelColour (x, y, juce::Colour ((juce::uint8) level, (juce::uint8) level,
+                                                          (juce::uint8) level, (juce::uint8) alpha));
         }
     }
 }
@@ -322,7 +357,12 @@ void MainComponent::resized()
     actionRow.removeFromLeft (10);
     saveAsButton.setBounds (actionRow);
     left.removeFromTop (10);
-    statusLabel.setBounds (left.removeFromTop (16));
+    // Fills whatever height is actually left in the column (centred text,
+    // so it reads fine whether that's 16px or more) instead of a fixed
+    // 16px -- when the right column ends up taller (its verdict box is
+    // dynamic), this keeps both columns' bottom edges lined up instead of
+    // leaving a dead gap under the left column's buttons.
+    statusLabel.setBounds (left);
 
     // Right column --------------------------------------------------------
     auto waveHeader = right.removeFromTop (20);

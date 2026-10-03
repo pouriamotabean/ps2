@@ -95,9 +95,6 @@ void WaveformDisplay::paint (juce::Graphics& g)
         g.setFont (PSFonts::ui (12.5f, true));
         g.setColour (PSColours::gold);
         g.drawText ("WAVEFORM", area.removeFromTop (16.0f), juce::Justification::centredLeft);
-        g.setFont (PSFonts::ui (12.5f, false));
-        g.setColour (PSColours::textDim);
-        g.drawText ("Process a file to see the waveform.", area, juce::Justification::centred);
         return;
     }
 

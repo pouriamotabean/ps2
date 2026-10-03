@@ -30,7 +30,7 @@ static constexpr int kLeftColumnHeight =
 
 static constexpr int kRightColumnHeight =
       20 + 6 + 150             // waveform header (+ "More details" link) + waveform
-    + 16 + 15 + 6 + 64;        // A/B listen
+    + 16 + 15 + 18 + 64;       // A/B listen -- 18px both above and below the button row (see resized())
 
 // The left column now lives inside its own card (see leftCardBounds in
 // paint()), padded in from the card's edges rather than touching them.
@@ -490,7 +490,11 @@ void MainComponent::resized()
 
     right.removeFromTop (16);
     abSectionLabel.setBounds (right.removeFromTop (15));
-    right.removeFromTop (6);
+    // Was 6px here vs 18px between the buttons and the verdict box below --
+    // that lopsided gap is exactly what made the A/B row look squeezed up
+    // against its label instead of sitting centred between the two.
+    // Matching it to 18 on both sides fixes that.
+    right.removeFromTop (18);
     audioPlayer.setBounds (right.removeFromTop (64));
 
     // The verdict now sits directly under the A/B section, in the right

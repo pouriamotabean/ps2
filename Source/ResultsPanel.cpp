@@ -2,6 +2,7 @@
 #include "PSTheme.h"
 #include "PSSkin.h"
 #include "PSFonts.h"
+#include <cmath>
 
 ResultsPanel::ResultsPanel() = default;
 
@@ -175,6 +176,21 @@ static std::vector<VerdictItem> buildVerdict (const SpotifyProcessor::Report& r)
     return items;
 }
 
+// How many lines a given verdict line needs to set at this width without
+// being clipped/ellipsised. Used by both getPreferredHeight() (to reserve
+// the right amount of vertical room) and paint() (to actually wrap), so
+// the two always agree. Capped at 3 lines -- by that point the box is
+// already generously tall and a genuinely longer sentence is vanishingly
+// rare for these fixed message templates.
+static int wrappedLineCount (const juce::Font& font, const juce::String& text, float availableWidth)
+{
+    if (availableWidth <= 1.0f)
+        return 1;
+    const float w = juce::GlyphArrangement::getStringWidth (font, text);
+    const int lines = (int) std::ceil ((double) w / (double) availableWidth);
+    return juce::jlimit (1, 3, lines);
+}
+
 static VerdictSeverity overallSeverity (const std::vector<VerdictItem>& items)
 {
     auto worst = VerdictSeverity::good;
@@ -251,20 +267,31 @@ void ResultsPanel::setReport (const SpotifyProcessor::Report& r)
     report = r;
     hasReport = true;
     isError = ! r.success;
-    verdictLineCount = isError ? 1 : (int) buildVerdict (report).size();
     repaint();
 }
 
-int ResultsPanel::getPreferredHeight() const
+// Mirrors the padding/icon/gap math in paint() exactly, so the height this
+// returns always matches what paint() actually draws -- see wrappedLineCount().
+int ResultsPanel::getPreferredHeight (int panelWidth) const
 {
     if (! hasReport)
         return 64;
     if (isError)
         return 110;
 
+    auto verdictItems = buildVerdict (report);
     const int verdictLineH = 20;
-    const int iconMin = 44;
-    const int boxH = juce::jmax (iconMin + 16, verdictLineH * verdictLineCount + 16);
+    const int iconSize = juce::jmax (44, verdictLineH * (int) verdictItems.size());
+
+    const float textWidth = juce::jmax (40.0f, (float) panelWidth - 36.0f /*reduced(18,12) L+R*/
+                                                 - (float) iconSize - 14.0f /*gap*/);
+    const auto font = PSFonts::ui (13.5f, true);
+
+    int totalLines = 0;
+    for (auto& item : verdictItems)
+        totalLines += wrappedLineCount (font, verdictPrefix (item.severity) + item.text, textWidth);
+
+    const int boxH = juce::jmax (iconSize + 16, verdictLineH * totalLines + 16);
     return boxH + 24; // top/bottom padding from reduced(18,12)
 }
 
@@ -302,15 +329,32 @@ void ResultsPanel::paint (juce::Graphics& g)
 
     drawVerdictIcon (g, iconArea.toFloat(), overallSeverity (verdictItems));
 
-    // Centre the text block vertically within the panel.
-    const int textBlockH = verdictLineH * (int) verdictItems.size();
-    auto textArea = area.withSizeKeepingCentre (area.getWidth(), textBlockH);
+    const auto verdictFont = PSFonts::ui (13.5f, true);
+    const float textWidth = (float) area.getWidth();
 
+    // Work out how many lines each item actually needs at this width
+    // first, so the whole block can be centred vertically as one unit --
+    // same approach getPreferredHeight() uses, so they always agree.
+    std::vector<int> lineCounts;
+    lineCounts.reserve (verdictItems.size());
+    int totalLines = 0;
     for (auto& item : verdictItems)
     {
-        g.setFont (PSFonts::ui (13.5f, true));
+        const int lines = wrappedLineCount (verdictFont, verdictPrefix (item.severity) + item.text, textWidth);
+        lineCounts.push_back (lines);
+        totalLines += lines;
+    }
+
+    const int textBlockH = verdictLineH * totalLines;
+    auto textArea = area.withSizeKeepingCentre (area.getWidth(), textBlockH);
+
+    for (size_t i = 0; i < verdictItems.size(); ++i)
+    {
+        auto& item = verdictItems[i];
+        const int lines = lineCounts[i];
+        g.setFont (verdictFont);
         g.setColour (verdictColour (item.severity));
         g.drawFittedText (verdictPrefix (item.severity) + item.text,
-                           textArea.removeFromTop (verdictLineH), juce::Justification::centredLeft, 1);
+                           textArea.removeFromTop (verdictLineH * lines), juce::Justification::centredLeft, lines);
     }
 }

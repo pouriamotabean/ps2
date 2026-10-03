@@ -90,6 +90,36 @@ void MainComponent::timerCallback()
     waveformDisplay.setPlayheadPosition (audioPlayer.getNormalizedPosition());
 }
 
+// A very subtle per-pixel grain, drawn once into a cached Image rather
+// than re-rolled every repaint (cheap to blend, not cheap to regenerate).
+// Kept as a plain random monochrome speckle rather than a baked texture
+// asset -- same reasoning as every other visual in this app (PSSkin,
+// PSLookAndFeel): it has to stay pixel-crisp under the window's own
+// continuous AffineTransform scaling, which a stretched bitmap would not.
+void MainComponent::generateNoiseImage()
+{
+    const int w = getWidth();
+    const int h = getHeight();
+    if (w <= 0 || h <= 0)
+        return;
+    if (noiseImage.isValid() && noiseImage.getWidth() == w && noiseImage.getHeight() == h)
+        return;
+
+    noiseImage = juce::Image (juce::Image::ARGB, w, h, true);
+    juce::Image::BitmapData bitmap (noiseImage, juce::Image::BitmapData::writeOnly);
+    juce::Random rng (0x50530001);
+
+    for (int y = 0; y < h; ++y)
+    {
+        for (int x = 0; x < w; ++x)
+        {
+            const auto v = (juce::uint8) rng.nextInt (256);
+            const auto a = (juce::uint8) rng.nextInt (9); // 0-8 alpha -- barely there, just breaks up the flat gradient
+            bitmap.setPixelColour (x, y, juce::Colour (v, v, v, a));
+        }
+    }
+}
+
 void MainComponent::toggleDetails()
 {
     detailsExpanded = ! detailsExpanded;
@@ -163,6 +193,14 @@ void MainComponent::paint (juce::Graphics& g)
     g.setGradientFill (vignette);
     g.fillRect (getLocalBounds());
 
+    // Subtle grain over the whole background -- see generateNoiseImage().
+    // Drawn before the main panel, so the panel's own opaque fill still
+    // sits cleanly on top of it; the grain mainly shows in the margins and
+    // the vignette area around the panel, where it reads as texture
+    // instead of a perfectly flat gradient.
+    if (noiseImage.isValid())
+        g.drawImageAt (noiseImage, 0, 0);
+
     auto panelBounds = getLocalBounds().reduced (18).withTrimmedTop (88).toFloat();
     PSSkin::drawGlowRoundedRect (g, panelBounds, 14.0f, PSColours::panel.brighter (0.03f),
                                   PSColours::panel.darker (0.1f), PSColours::panel, 0.0f);
@@ -227,6 +265,8 @@ static constexpr int kRightColumnHeight =
 
 void MainComponent::resized()
 {
+    generateNoiseImage(); // no-op if the size hasn't actually changed
+
     auto area = getLocalBounds().reduced (18);
 
     auto header = area.removeFromTop (70);
@@ -249,7 +289,14 @@ void MainComponent::resized()
     // (waveform + A/B) on the right -- a wide, plugin-like layout instead
     // of one long vertical stack. Both columns share one row whose height
     // is whichever column is taller, so nothing gets clipped.
-    auto columnsArea = inner.removeFromTop (juce::jmax (kLeftColumnHeight, kRightColumnHeight));
+    // The right column's own pixel width (horizontal only, so it's valid
+    // before the row's height below is decided) -- the verdict now lives
+    // at the bottom of this column, so its height depends on this width.
+    const int rightColumnWidth = inner.getWidth() - kLeftColumnWidth - kColumnGap;
+    const int resultsPanelH = resultsPanel.getPreferredHeight (rightColumnWidth);
+    const int rightColumnTotalHeight = kRightColumnHeight + 18 + resultsPanelH;
+
+    auto columnsArea = inner.removeFromTop (juce::jmax (kLeftColumnHeight, rightColumnTotalHeight));
     auto left  = columnsArea.removeFromLeft (kLeftColumnWidth);
     columnsArea.removeFromLeft (kColumnGap);
     auto right = columnsArea;
@@ -294,11 +341,12 @@ void MainComponent::resized()
     right.removeFromTop (6);
     audioPlayer.setBounds (right.removeFromTop (64));
 
-    // The verdict gets the full width below both columns -- it's the
-    // headline result and needs room to actually read, not a squeezed
-    // single column.
-    inner.removeFromTop (18);
-    resultsPanel.setBounds (inner.removeFromTop (resultsPanel.getPreferredHeight()));
+    // The verdict now sits directly under the A/B section, in the right
+    // column's own (narrower) width, instead of spanning the full width
+    // below both columns -- this is what removes the dead space that used
+    // to sit below the A/B buttons, and lets the whole window be shorter.
+    right.removeFromTop (18);
+    resultsPanel.setBounds (right.removeFromTop (resultsPanelH));
 
     // Everything numeric lives behind the "More details" link above,
     // closed by default. When open it floats on top of everything else in
@@ -315,15 +363,19 @@ void MainComponent::resized()
 void MainComponent::updateHeight()
 {
     // Mirrors the block order in resized(): header, the two-column row
-    // (sized to whichever column is taller), the verdict, and the credit
+    // (sized to whichever column is taller -- the right column now
+    // includes the verdict at its bottom, see resized()), and the credit
     // line. The details panel is a floating overlay (see resized()) and
     // deliberately does NOT affect this -- toggling it never resizes the
     // window.
+    const int rightColumnWidth = kNativeWidth - 2 * 18 - 2 * 22 - kLeftColumnWidth - kColumnGap;
+    const int resultsPanelH = resultsPanel.getPreferredHeight (rightColumnWidth);
+    const int rightColumnTotalHeight = kRightColumnHeight + 18 + resultsPanelH;
+
     int h = 18                              // top margin
           + 70 + 18                         // header + gap
           + 18                              // inner reduced top
-          + juce::jmax (kLeftColumnHeight, kRightColumnHeight)
-          + 18 + resultsPanel.getPreferredHeight()
+          + juce::jmax (kLeftColumnHeight, rightColumnTotalHeight)
           + 18                              // inner reduced bottom margin
           + 24;                             // credit label
 

@@ -44,6 +44,13 @@ private:
     void toggleDetails();
     void updateHeight();
 
+    // Procedurally-generated grain, not a baked image, so it stays a crisp
+    // per-pixel pattern at any scale the ScaleHost applies rather than
+    // blurring like a stretched bitmap would. Regenerated only when the
+    // component's own size actually changes.
+    void generateNoiseImage();
+    juce::Image noiseImage;
+
     PSLookAndFeel lookAndFeel;
 
     // --- Header -------------------------------------------------------

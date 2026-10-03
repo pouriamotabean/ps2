@@ -52,17 +52,60 @@ void AudioPlayer::resized()
     auto area = getLocalBounds();
     auto row = area.removeFromTop (38);
     const int gap = 8;
-    const int w = (row.getWidth() - gap * 3) / 4;
-    playOriginalButton.setBounds (row.removeFromLeft (w));
+
+    // Weighted, not equal, widths -- matches the design spec's "A/B button
+    // row" proportions (A widest since it's the reference/default, Stop
+    // narrowest since it's a single short word), rather than four
+    // mechanically identical boxes.
+    const float wA = 1.15f, wB = 1.0f, wC = 1.0f, wStop = 0.83f;
+    const float totalW = wA + wB + wC + wStop;
+    const int avail = row.getWidth() - gap * 3;
+    const int wAi = juce::roundToInt ((float) avail * wA / totalW);
+    const int wBi = juce::roundToInt ((float) avail * wB / totalW);
+    const int wCi = juce::roundToInt ((float) avail * wC / totalW);
+
+    playOriginalButton.setBounds (row.removeFromLeft (wAi));
     row.removeFromLeft (gap);
-    playProcessedButton.setBounds (row.removeFromLeft (w));
+    playProcessedButton.setBounds (row.removeFromLeft (wBi));
     row.removeFromLeft (gap);
-    playDifferenceButton.setBounds (row.removeFromLeft (w));
+    playDifferenceButton.setBounds (row.removeFromLeft (wCi));
     row.removeFromLeft (gap);
-    stopButton.setBounds (row);
+    stopButton.setBounds (row); // takes the remainder, absorbing any rounding slack
 
     area.removeFromTop (6);
     statusLabel.setBounds (area.removeFromTop (18));
+}
+
+void AudioPlayer::paint (juce::Graphics& g)
+{
+    // A thin accent underline below whichever source is currently playing,
+    // instead of a filled capsule -- matches the design spec's "subtle
+    // teal bottom accent line" for the active A/B state.
+    const juce::TextButton* activeButton = nullptr;
+    switch (currentlyPlaying)
+    {
+        case Playing::original:  activeButton = &playOriginalButton;  break;
+        case Playing::processed: activeButton = &playProcessedButton; break;
+        case Playing::difference: activeButton = &playDifferenceButton; break;
+        case Playing::none:
+        default: break;
+    }
+
+    if (activeButton != nullptr)
+    {
+        auto b = activeButton->getBounds().toFloat().reduced (10.0f, 0.0f);
+        const float y = activeButton->getBottom() - 2.0f;
+        juce::Colour c = PSColours::accentHi;
+
+        juce::DropShadow glow (c.withAlpha (0.5f), 5, {});
+        juce::Path line;
+        line.startNewSubPath (b.getX(), y);
+        line.lineTo (b.getRight(), y);
+        glow.drawForPath (g, line);
+
+        g.setColour (c);
+        g.drawLine (b.getX(), y, b.getRight(), y, 2.0f);
+    }
 }
 
 void AudioPlayer::setSources (const juce::File& originalFileIn, const juce::File& processedFileIn,
@@ -135,6 +178,7 @@ void AudioPlayer::switchTo (const juce::File& file, float gain, Playing which, c
     transportSource.start();
     currentlyPlaying = which;
     statusLabel.setText (statusText, juce::dontSendNotification);
+    repaint(); // moves the active-state underline to the new source (see paint())
 }
 
 void AudioPlayer::playOriginal()
@@ -190,6 +234,7 @@ void AudioPlayer::stop()
 {
     transportSource.stop();
     currentlyPlaying = Playing::none;
+    repaint(); // clears the active-state underline (see paint())
 }
 
 void AudioPlayer::changeListenerCallback (juce::ChangeBroadcaster*)
@@ -197,6 +242,6 @@ void AudioPlayer::changeListenerCallback (juce::ChangeBroadcaster*)
     if (! transportSource.isPlaying() && currentlyPlaying != Playing::none)
     {
         currentlyPlaying = Playing::none;
-        juce::MessageManager::callAsync ([this] { statusLabel.setText ("Finished.", juce::dontSendNotification); });
+        juce::MessageManager::callAsync ([this] { statusLabel.setText ("Finished.", juce::dontSendNotification); repaint(); });
     }
 }

@@ -32,6 +32,15 @@ static constexpr int kRightColumnHeight =
       20 + 6 + 150             // waveform header (+ "More details" link) + waveform
     + 16 + 15 + 6 + 64;        // A/B listen
 
+// The left column now lives inside its own card (see leftCardBounds in
+// paint()), padded in from the card's edges rather than touching them.
+// Only the top is padded on purpose -- the bottom is left to whatever
+// slack is left over when the card has to grow to match the right
+// column's height, so that slack reads as intentional card padding
+// instead of orphaned background (see the comment in resized()).
+static constexpr int kLeftCardHorizPad = 16;
+static constexpr int kLeftCardTopPad = 16;
+
 MainComponent::MainComponent()
     : targetControl ({ { "Loud", "-11 LUFS" }, { "Normal", "-14 LUFS" }, { "Quiet", "-19 LUFS" } }),
       qualityControl ({ { "Low", "24 kbps" }, { "Normal", "96 kbps" }, { "High", "160 kbps" }, { "V.High", "320 kbps" } })
@@ -43,20 +52,19 @@ MainComponent::MainComponent()
     // to it, and a small tracked caption underneath -- per the design spec
     // (icon + title were previously stacked vertically; the spec puts the
     // title beside the icon instead, with the caption taking the old
-    // "Predict Spotify" subtitle's place below).
-    titleLogo.setImage (PSSkin::logoImage());
-    titleLogo.setImagePlacement (juce::RectanglePlacement (juce::RectanglePlacement::xLeft
-                                                             | juce::RectanglePlacement::yMid
-                                                             | juce::RectanglePlacement::onlyReduceInSize));
-    addAndMakeVisible (titleLogo);
-
+    // "Predict Spotify" subtitle's place below). The icon itself is drawn
+    // directly in paint() -- see headerIconBounds in MainComponent.h.
     titleLabel.setText ("Predict Spotify", juce::dontSendNotification);
     titleLabel.setFont (PSFonts::ui (23.0f, false));
     titleLabel.setColour (juce::Label::textColourId, PSColours::text);
     titleLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (titleLabel);
 
-    subtitleLabel.setText ("MASTER  \xc2\xb7  ANALYZE  \xc2\xb7  STREAM", juce::dontSendNotification);
+    // See waveformSectionLabel's comment in MainComponent.h: plain
+    // juce::String(const char*) does not assume UTF-8, so the middle dot
+    // needs the explicit CharPointer_UTF8 wrapper or it mojibakes to "Â·".
+    subtitleLabel.setText (juce::String (juce::CharPointer_UTF8 ("MASTER  \xc2\xb7  ANALYZE  \xc2\xb7  STREAM")),
+                            juce::dontSendNotification);
     subtitleLabel.setFont (PSFonts::ui (10.5f, false).withExtraKerningFactor (0.12f));
     subtitleLabel.setColour (juce::Label::textColourId, PSColours::textDim);
     subtitleLabel.setJustificationType (juce::Justification::centredLeft);
@@ -280,19 +288,39 @@ void MainComponent::paint (juce::Graphics& g)
     if (noiseImage.isValid())
         g.drawImageAt (noiseImage, 0, 0);
 
-    auto panelBounds = getLocalBounds().reduced (18).withTrimmedTop (18 + kHeaderHeight).toFloat();
-    PSSkin::drawGlowRoundedRect (g, panelBounds, 20.0f, PSColours::panel.brighter (0.03f),
+    // Left controls get their OWN card (not one giant panel wrapping both
+    // columns, which is what the old layout did) -- matching the
+    // reference: a self-contained left card, and separate individual boxes
+    // on the right (waveform panel, verdict panel; A/B stays un-boxed).
+    // This is also what actually fixes the left/right height balance: the
+    // verdict box on the right already visibly stretches to fill any
+    // leftover height (it's a real drawn box), but the left side's old
+    // "stretch" was just an invisible label -- so when the right column
+    // was naturally taller, the left looked like it dead-ended in empty
+    // background. Now that leftover space is inside this card too.
+    auto leftCard = leftCardBounds.toFloat();
+    PSSkin::drawGlowRoundedRect (g, leftCard, 20.0f, PSColours::panel.brighter (0.03f),
                                   PSColours::panel.darker (0.1f), PSColours::panel, 0.0f);
     g.setColour (PSColours::border);
-    g.drawRoundedRectangle (panelBounds, 20.0f, 1.0f);
+    g.drawRoundedRectangle (leftCard, 20.0f, 1.0f);
 
     if (isDragHover)
     {
+        auto dropBounds = getLocalBounds().reduced (18).withTrimmedTop (18 + kHeaderHeight).toFloat();
         g.setColour (PSColours::accentHi.withAlpha (0.9f));
-        g.drawRoundedRectangle (panelBounds.reduced (2.0f), 20.0f, 2.5f);
+        g.drawRoundedRectangle (dropBounds.reduced (2.0f), 20.0f, 2.5f);
         g.setFont (PSFonts::ui (18.0f, true));
         g.setColour (PSColours::accentHi);
-        g.drawText ("Drop audio file to load", panelBounds, juce::Justification::centred);
+        g.drawText ("Drop audio file to load", dropBounds, juce::Justification::centred);
+    }
+
+    // Header icon mark: a small glowing accent tile with a tiny waveform
+    // glyph inside -- code-drawn (not the old baked PNG) so it stays
+    // crisp at any scale, matching every other icon in this app.
+    {
+        auto iconBounds = headerIconBounds.toFloat();
+        PSSkin::drawGlowRoundedRect (g, iconBounds, 10.0f, PSColours::accentHi, PSColours::accent, PSColours::accent, 0.35f);
+        PSSkin::drawIcon (g, iconBounds.reduced (iconBounds.getWidth() * 0.24f), PSSkin::Icon::waveform, juce::Colours::white);
     }
 
     // Header: subtle divider under the icon+title row, and a small
@@ -368,12 +396,14 @@ void MainComponent::resized()
     auto area = getLocalBounds().reduced (18);
 
     auto header = area.removeFromTop (kHeaderHeight);
-    header.removeFromLeft (20);
+    // Same 22px inset the content panel below uses (see "inner" below) --
+    // was 20px, a stray 2px mismatch against the panel's left edge that
+    // broke the left-margin symmetry the spec calls for.
+    header.removeFromLeft (22);
     auto headerRight = header.removeFromRight (34);
     headerRightIconBounds = headerRight.removeFromRight (20).withSizeKeepingCentre (20, 20);
 
-    auto iconBox = header.removeFromLeft (42).withSizeKeepingCentre (42, 42);
-    titleLogo.setBounds (iconBox);
+    headerIconBounds = header.removeFromLeft (42).withSizeKeepingCentre (42, 42);
     header.removeFromLeft (14);
 
     // Title + caption as one 42px-tall block, centred in the full header
@@ -408,12 +438,17 @@ void MainComponent::resized()
     const int resultsPanelH = resultsPanel.getPreferredHeight (rightColumnWidth);
     const int rightColumnTotalHeight = kRightColumnHeight + 18 + resultsPanelH;
 
-    auto columnsArea = inner.removeFromTop (juce::jmax (kLeftColumnHeight, rightColumnTotalHeight));
-    auto left  = columnsArea.removeFromLeft (kLeftColumnWidth);
+    auto columnsArea = inner.removeFromTop (juce::jmax (kLeftColumnHeight + kLeftCardTopPad, rightColumnTotalHeight));
+    leftCardBounds = columnsArea.removeFromLeft (kLeftColumnWidth); // the card's own bounds, captured before insetting for content
     columnsArea.removeFromLeft (kColumnGap);
     auto right = columnsArea;
 
     // Left column -------------------------------------------------------
+    // Inset from the card's edges (see leftCardBounds/kLeftCard* above) --
+    // only the top is padded; the bottom is left to statusLabel's natural
+    // stretch, which now reads as card padding instead of orphaned space.
+    auto left = leftCardBounds.reduced (kLeftCardHorizPad, 0).withTrimmedTop (kLeftCardTopPad);
+
     loadButton.setBounds (left.removeFromTop (40));
     left.removeFromTop (6);
     inputFileLabel.setBounds (left.removeFromTop (18));
@@ -499,7 +534,7 @@ void MainComponent::updateHeight()
     int h = 18                              // top margin
           + kHeaderHeight + 18              // header + gap
           + 18                              // inner reduced top
-          + juce::jmax (kLeftColumnHeight, rightColumnTotalHeight)
+          + juce::jmax (kLeftColumnHeight + kLeftCardTopPad, rightColumnTotalHeight)
           + 18                              // inner reduced bottom margin
           + 24;                             // credit label
 

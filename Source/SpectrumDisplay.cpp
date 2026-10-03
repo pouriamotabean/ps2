@@ -76,9 +76,13 @@ void SpectrumDisplay::paint (juce::Graphics& g)
     g.setFont (PSFonts::ui (10.5f, false));
     auto legend = header;
     g.setColour (PSColours::textDim);
-    g.drawText ("— Original", legend.removeFromLeft (legend.getWidth() * 0.5f), juce::Justification::centredRight);
+    // Plain ASCII hyphen, not an em-dash -- juce::String(const char*) does
+    // NOT assume UTF-8 (see MainComponent.h's waveformSectionLabel comment
+    // for the mojibake this caused elsewhere), and a hyphen reads fine
+    // here anyway, so there's no need for the CharPointer_UTF8 wrapper.
+    g.drawText ("- Original", legend.removeFromLeft (legend.getWidth() * 0.5f), juce::Justification::centredRight);
     g.setColour (PSColours::accentHi);
-    g.drawText ("— Processed", legend, juce::Justification::centredRight);
+    g.drawText ("- Processed", legend, juce::Justification::centredRight);
 
     area.removeFromTop (4.0f);
 

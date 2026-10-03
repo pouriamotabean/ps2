@@ -39,6 +39,7 @@ public:
     float getNormalizedPosition() const;
 
     void resized() override;
+    void paint (juce::Graphics& g) override;
 
 private:
     enum class Playing { none, original, processed, difference };

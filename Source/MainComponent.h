@@ -23,6 +23,12 @@ public:
     void fileDragExit (const juce::StringArray& files) override;
     void filesDropped (const juce::StringArray& files, int x, int y) override;
 
+    // Called whenever this component's own ideal ("native") size changes
+    // (e.g. the verdict grew another line, or "More details" was toggled).
+    // The host window uses this to resize itself and keep everything
+    // scaled together rather than reflowing or clipping.
+    std::function<void()> onNativeSizeChanged;
+
 private:
     void chooseInputFile();
     void loadInputFile (const juce::File& file);

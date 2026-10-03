@@ -60,25 +60,48 @@ static std::vector<VerdictItem> buildVerdict (const SpotifyProcessor::Report& r)
 {
     std::vector<VerdictItem> items;
 
-    // Actual digital clipping in the delivered WAV (post-codec). This is
-    // real distortion, period -- flagged regardless of how anyone masters.
-    if (r.outputSamplePeak > 0.05)
-        items.push_back ({ "The delivered file is actually clipping (sample peak "
-                                + juce::String (r.outputSamplePeak, 1) + " dBFS) - this is audible distortion.",
+    // The processing chain already enforces a hard "never exceed 0 dBFS
+    // going into the encoder" safety net (see SpotifyProcessor::process,
+    // step 2), so the signal handed to the codec never clips. Any peak
+    // measured AFTER the real Ogg Vorbis decode is therefore pure lossy-
+    // codec reconstruction overshoot -- a normal, expected artifact of any
+    // lossy codec (Spotify's own encoding included), not something the
+    // user's master did wrong. A sliver of overshoot (well under 1 dB) is
+    // universal and inaudible; only a genuinely large overshoot is worth a
+    // flag. These thresholds were previously far too tight (0.05 dBFS),
+    // which fired "GO REDO THIS" on essentially every normally-loud file.
+    if (r.outputSamplePeak > 1.0)
+        items.push_back ({ "The delivered file measures a real sample-peak over ("
+                                + juce::String (r.outputSamplePeak, 1) + " dBFS) after the codec round trip - "
+                                + "this is large enough to risk audible distortion.",
                             VerdictSeverity::critical });
+    else if (r.outputSamplePeak > 0.3)
+        items.push_back ({ "The delivered file has a small sample-peak over ("
+                                + juce::String (r.outputSamplePeak, 1) + " dBFS) after the codec round trip - "
+                                + "likely inaudible, but a bit more than the usual codec overshoot.",
+                            VerdictSeverity::warn });
+    // Below 0.3 dBFS: normal lossy-codec reconstruction overshoot, not worth a note.
 
-    // Inter-sample ("true") peak overs in the delivered file -- real risk
-    // of clipping on playback gear, not just a stylistic loudness choice.
-    if (r.outputTruePeak > 1.0)
+    // Inter-sample ("true") peak overs in the delivered file. A small
+    // overshoot after a lossy encode is expected and not a real clipping
+    // risk on virtually all modern playback gear; only a clearly large
+    // overshoot is flagged.
+    if (r.outputTruePeak > 2.0)
         items.push_back ({ "True peak in the delivered file is "
                                 + juce::String (r.outputTruePeak, 1)
                                 + " dBTP - likely to clip on real playback hardware.",
                             VerdictSeverity::critical });
-    else if (r.outputTruePeak > 0.0)
+    else if (r.outputTruePeak > 1.0)
         items.push_back ({ "True peak in the delivered file is "
                                 + juce::String (r.outputTruePeak, 1)
                                 + " dBTP - some risk of clipping on certain playback gear.",
                             VerdictSeverity::bad });
+    else if (r.outputTruePeak > 0.3)
+        items.push_back ({ "True peak in the delivered file is "
+                                + juce::String (r.outputTruePeak, 1)
+                                + " dBTP - a bit more than the usual codec overshoot, but low risk.",
+                            VerdictSeverity::warn });
+    // Below 0.3 dBTP: normal lossy-codec reconstruction overshoot, not worth a note.
 
     // Limiter gain reduction: how much the loudness boost actually reshaped
     // the dynamics. Thresholds are about audible severity, not taste.

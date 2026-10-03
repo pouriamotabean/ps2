@@ -10,10 +10,14 @@ namespace PSFonts
         return juce::Typeface::createSystemTypefaceFor (data, (size_t) size);
     }
 
-    // JUCE's binary-data name mangling converts "." to "_" but strips
-    // hyphens outright rather than converting them to underscores -- so
+    // JUCE's binary-data name mangling (juce_BuildHelperFunctions.cpp,
+    // makeBinaryDataIdentifierName) converts "." to "_" but *strips hyphens
+    // outright* rather than converting them to underscores -- so
     // "Inter-Variable.ttf" becomes "InterVariable_ttf", not
-    // "Inter_Variable_ttf".
+    // "Inter_Variable_ttf". Verified directly against JUCE source after the
+    // original (hyphen->underscore) assumption caused a CI build failure
+    // ("is not a member of 'PSBinaryData'") that a missing-file theory
+    // didn't actually explain -- the files were present all along.
     static const juce::Typeface::Ptr& interTypeface()
     {
         static juce::Typeface::Ptr tf = loadTypeface (PSBinaryData::InterVariable_ttf,

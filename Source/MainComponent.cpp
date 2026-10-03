@@ -245,7 +245,13 @@ void MainComponent::updateHeight()
     if (detailsExpanded)
         h += 14 + DetailsPanel::kPreferredHeight;
 
-    setSize (getWidth() > 0 ? getWidth() : 660, h);
+    // Fixed native/design width -- the whole UI is scaled as one unit by
+    // the host window (see Main.cpp's ScaleHost), not reflowed, so this
+    // never needs to track the window's actual current width.
+    setSize (660, h);
+
+    if (onNativeSizeChanged)
+        onNativeSizeChanged();
 }
 
 void MainComponent::chooseInputFile()

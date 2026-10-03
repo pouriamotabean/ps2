@@ -31,7 +31,9 @@ AudioPlayer::AudioPlayer()
     statusLabel.setJustificationType (juce::Justification::centred);
     statusLabel.setFont (PSFonts::ui (12.0f, false));
     statusLabel.setColour (juce::Label::textColourId, PSColours::textDim);
-    statusLabel.setText ("Process a file to enable A/B playback.", juce::dontSendNotification);
+    // Left blank until there's something real to report (playing/finished/
+    // error) -- this label's job is live transport status, not an idle
+    // instruction that's just visual clutter before anything's loaded.
     addAndMakeVisible (statusLabel);
 }
 
@@ -90,7 +92,7 @@ void AudioPlayer::reset()
     playProcessedButton.setEnabled (false);
     playDifferenceButton.setEnabled (false);
     stopButton.setEnabled (false);
-    statusLabel.setText ("Process a file to enable A/B playback.", juce::dontSendNotification);
+    statusLabel.setText ({}, juce::dontSendNotification);
 }
 
 void AudioPlayer::loadIntoTransport (const juce::File& file, float gain, double startPositionSeconds)

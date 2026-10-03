@@ -146,7 +146,7 @@ void MainComponent::generateNoiseImage()
                                    + juce::jmax (0.0f, sheen) * 0.5f
                                    + std::abs (sparkle) * 0.25f;
 
-            const int alpha = juce::jlimit (0, 20, 2 + (int) (highlight * 20.0f));
+            const int alpha = juce::jlimit (0, 46, 6 + (int) (highlight * 46.0f));
             const int level = juce::jlimit (150, 255, 190 + (int) (sparkle * 30.0f));
 
             bitmap.setPixelColour (x, y, juce::Colour ((juce::uint8) level, (juce::uint8) level,
@@ -385,8 +385,15 @@ void MainComponent::resized()
     // column's own (narrower) width, instead of spanning the full width
     // below both columns -- this is what removes the dead space that used
     // to sit below the A/B buttons, and lets the whole window be shorter.
+    // It takes ALL of the column's remaining height (not just its own
+    // preferred height) -- "right" is already exactly as tall as the
+    // shared row (see rightColumnTotalHeight above), so whichever column
+    // is naturally shorter has its trailing element (this, or statusLabel
+    // on the left) stretch to make up the difference. That's what keeps
+    // the two columns' bottom edges lined up no matter which side's
+    // content happens to be taller.
     right.removeFromTop (18);
-    resultsPanel.setBounds (right.removeFromTop (resultsPanelH));
+    resultsPanel.setBounds (right);
 
     // Everything numeric lives behind the "More details" link above,
     // closed by default. When open it floats on top of everything else in

@@ -19,6 +19,13 @@ public:
                       const juce::File& differenceFile = {}, double differenceBoostDb = 0.0);
     void reset();
 
+    // Stops playback and releases the current file's reader/handle, while
+    // leaving the stored source paths and enabled buttons alone (unlike
+    // reset()). Callers that are about to overwrite one of those files on
+    // disk should call this first, or the overwrite can fail while a
+    // handle is still open (e.g. on Windows).
+    void stop();
+
     void resized() override;
 
 private:
@@ -26,7 +33,6 @@ private:
     void playOriginal();
     void playProcessed();
     void playDifference();
-    void stop();
     void loadIntoTransport (const juce::File& file, float gain);
 
     juce::AudioFormatManager formatManager;

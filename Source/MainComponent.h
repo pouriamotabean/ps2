@@ -33,6 +33,7 @@ private:
     void chooseInputFile();
     void loadInputFile (const juce::File& file);
     void runProcessing();
+    void chooseSaveLocation();
     void showReport (const SpotifyProcessor::Report& report, const juce::File& outFile);
     void toggleDetails();
     void updateHeight();
@@ -56,7 +57,11 @@ private:
     SegmentedControl qualityControl;
 
     // --- Action / verdict ---------------------------------------------------
-    juce::TextButton processButton { "Process & Save As..." };
+    // Process runs immediately (no save dialog up front) and writes the
+    // result to a temp file; Save As... (enabled once that succeeds) is
+    // how the user actually keeps/moves the output.
+    juce::TextButton processButton { "Process" };
+    juce::TextButton saveAsButton { "Save As..." };
     ResultsPanel resultsPanel;
     juce::Label statusLabel;
 
@@ -81,6 +86,7 @@ private:
 
     std::unique_ptr<juce::FileChooser> fileChooser;
     juce::File inputFile;
+    juce::File lastOutputFile; // set once a run succeeds; Save As... copies from here
     std::atomic<bool> isProcessing { false };
     bool isDragHover = false;
 

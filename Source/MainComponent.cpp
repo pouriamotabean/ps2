@@ -8,7 +8,7 @@ MainComponent::MainComponent()
       qualityControl ({ { "Low", "24 kbps" }, { "Normal", "96 kbps" }, { "High", "160 kbps" }, { "V.High", "320 kbps" } })
 {
     setLookAndFeel (&lookAndFeel);
-    setSize (660, 760); // final height recomputed by updateHeight() below
+    setSize (960, 600); // final size recomputed by updateHeight() below
 
     titleLogo.setImage (PSSkin::logoImage());
     titleLogo.setImagePlacement (juce::RectanglePlacement (juce::RectanglePlacement::xLeft
@@ -52,6 +52,10 @@ MainComponent::MainComponent()
     processButton.setColour (juce::TextButton::buttonColourId, PSColours::accent);
     processButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
     addAndMakeVisible (processButton);
+
+    saveAsButton.onClick = [this] { chooseSaveLocation(); };
+    saveAsButton.setEnabled (false); // enabled once a run succeeds
+    addAndMakeVisible (saveAsButton);
 
     addAndMakeVisible (resultsPanel);
     addAndMakeVisible (waveformDisplay);
@@ -160,6 +164,26 @@ void MainComponent::paint (juce::Graphics& g)
     }
 }
 
+// Fixed native/design width -- the whole UI is scaled as one unit by the
+// host window (see Main.cpp's ScaleHost), not reflowed, so layout never
+// needs to track the window's actual current width/height.
+static constexpr int kNativeWidth = 960;
+static constexpr int kLeftColumnWidth = 300;
+static constexpr int kColumnGap = 24;
+
+// Height of the left column's own content (load row through status
+// label), used both to lay it out and, via jmax with the right column,
+// to size the shared row both columns sit in.
+static constexpr int kLeftColumnHeight =
+      40 + 6 + 18 + 18        // load button + file label + gap
+    + 15 + 6 + 52 + 16        // target section
+    + 15 + 6 + 52 + 18        // quality section
+    + 44 + 10 + 16;           // process/save row + gap + status label
+
+static constexpr int kRightColumnHeight =
+      20 + 6 + 150             // waveform header (+ "More details" link) + waveform
+    + 16 + 15 + 6 + 64;        // A/B listen
+
 void MainComponent::resized()
 {
     auto area = getLocalBounds().reduced (18);
@@ -172,48 +196,58 @@ void MainComponent::resized()
     area.removeFromTop (18);
     auto inner = area.reduced (22, 18);
 
-    auto loadRow = inner.removeFromTop (40);
-    loadButton.setBounds (loadRow.removeFromLeft (150));
-    loadRow.removeFromLeft (14);
-    inputFileLabel.setBounds (loadRow);
+    // --- Two columns side by side: controls on the left, the visual
+    // (waveform + A/B) on the right -- a wide, plugin-like layout instead
+    // of one long vertical stack. Both columns share one row whose height
+    // is whichever column is taller, so nothing gets clipped.
+    auto columnsArea = inner.removeFromTop (juce::jmax (kLeftColumnHeight, kRightColumnHeight));
+    auto left  = columnsArea.removeFromLeft (kLeftColumnWidth);
+    columnsArea.removeFromLeft (kColumnGap);
+    auto right = columnsArea;
 
-    inner.removeFromTop (18);
+    // Left column -------------------------------------------------------
+    loadButton.setBounds (left.removeFromTop (40));
+    left.removeFromTop (6);
+    inputFileLabel.setBounds (left.removeFromTop (18));
+    left.removeFromTop (18);
 
-    targetSectionLabel.setBounds (inner.removeFromTop (15));
-    inner.removeFromTop (6);
-    targetControl.setBounds (inner.removeFromTop (52));
+    targetSectionLabel.setBounds (left.removeFromTop (15));
+    left.removeFromTop (6);
+    targetControl.setBounds (left.removeFromTop (52));
+    left.removeFromTop (16);
 
-    inner.removeFromTop (16);
+    qualitySectionLabel.setBounds (left.removeFromTop (15));
+    left.removeFromTop (6);
+    qualityControl.setBounds (left.removeFromTop (52));
+    left.removeFromTop (18);
 
-    qualitySectionLabel.setBounds (inner.removeFromTop (15));
-    inner.removeFromTop (6);
-    qualityControl.setBounds (inner.removeFromTop (52));
+    auto actionRow = left.removeFromTop (44);
+    processButton.setBounds (actionRow.removeFromLeft (juce::roundToInt ((float) actionRow.getWidth() * 0.6f)));
+    actionRow.removeFromLeft (10);
+    saveAsButton.setBounds (actionRow);
+    left.removeFromTop (10);
+    statusLabel.setBounds (left.removeFromTop (16));
 
-    inner.removeFromTop (18);
-    processButton.setBounds (inner.removeFromTop (44));
-
-    inner.removeFromTop (10);
-    statusLabel.setBounds (inner.removeFromTop (16));
-
-    // Verdict - the one piece of feedback shown by default, right after
-    // the status line, with the waveform right underneath it.
-    inner.removeFromTop (10);
-    resultsPanel.setBounds (inner.removeFromTop (resultsPanel.getPreferredHeight()));
-
-    inner.removeFromTop (14);
-    auto waveHeader = inner.removeFromTop (20);
+    // Right column --------------------------------------------------------
+    auto waveHeader = right.removeFromTop (20);
     detailsToggleButton.setBounds (waveHeader.removeFromRight (130));
     waveformSectionLabel.setBounds (waveHeader);
-    inner.removeFromTop (6);
-    waveformDisplay.setBounds (inner.removeFromTop (140));
+    right.removeFromTop (6);
+    waveformDisplay.setBounds (right.removeFromTop (150));
 
-    inner.removeFromTop (16);
-    abSectionLabel.setBounds (inner.removeFromTop (15));
-    inner.removeFromTop (6);
-    audioPlayer.setBounds (inner.removeFromTop (64));
+    right.removeFromTop (16);
+    abSectionLabel.setBounds (right.removeFromTop (15));
+    right.removeFromTop (6);
+    audioPlayer.setBounds (right.removeFromTop (64));
+
+    // The verdict gets the full width below both columns -- it's the
+    // headline result and needs room to actually read, not a squeezed
+    // single column.
+    inner.removeFromTop (18);
+    resultsPanel.setBounds (inner.removeFromTop (resultsPanel.getPreferredHeight()));
 
     // Everything numeric lives behind the "More details" link above,
-    // closed by default -- when open it unfolds right here.
+    // closed by default -- when open it unfolds here, also full width.
     if (detailsExpanded)
     {
         inner.removeFromTop (14);
@@ -225,30 +259,21 @@ void MainComponent::resized()
 
 void MainComponent::updateHeight()
 {
-    // Mirrors the block order in resized(): header down through the A/B
-    // player (always present), plus the details panel only when expanded,
-    // plus the credit line.
-    int h = 18            // top margin
-          + 70 + 18        // header + gap
-          + 18             // inner reduced top
-          + 40 + 18        // load row + gap
-          + 15 + 6 + 52 + 16   // target control
-          + 15 + 6 + 52 + 18   // quality control
-          + 44 + 10        // process button + gap
-          + 16             // status label
-          + 10 + resultsPanel.getPreferredHeight()
-          + 14 + 20 + 6 + 140  // waveform header (+ "More details" link) + waveform
-          + 16 + 15 + 6 + 64   // A/B listen
-          + 18             // inner reduced bottom margin
-          + 24;            // credit label
+    // Mirrors the block order in resized(): header, the two-column row
+    // (sized to whichever column is taller), the verdict, optionally the
+    // details panel, and the credit line.
+    int h = 18                              // top margin
+          + 70 + 18                         // header + gap
+          + 18                              // inner reduced top
+          + juce::jmax (kLeftColumnHeight, kRightColumnHeight)
+          + 18 + resultsPanel.getPreferredHeight()
+          + 18                              // inner reduced bottom margin
+          + 24;                             // credit label
 
     if (detailsExpanded)
         h += 14 + DetailsPanel::kPreferredHeight;
 
-    // Fixed native/design width -- the whole UI is scaled as one unit by
-    // the host window (see Main.cpp's ScaleHost), not reflowed, so this
-    // never needs to track the window's actual current width.
-    setSize (660, h);
+    setSize (kNativeWidth, h);
 
     if (onNativeSizeChanged)
         onNativeSizeChanged();
@@ -274,8 +299,10 @@ void MainComponent::chooseInputFile()
 void MainComponent::loadInputFile (const juce::File& file)
 {
     inputFile = file;
+    lastOutputFile = juce::File {};
+    saveAsButton.setEnabled (false);
     inputFileLabel.setText (file.getFileName(), juce::dontSendNotification);
-    resultsPanel.setPlaceholder ("Ready. Press \"Process & Save As...\" to continue.");
+    resultsPanel.setPlaceholder ("Ready. Press \"Process\" to continue.");
     detailsPanel.clear();
     waveformDisplay.clear();
     audioPlayer.reset();
@@ -292,6 +319,49 @@ void MainComponent::runProcessing()
     if (isProcessing.load())
         return;
 
+    // Re-processing the same input overwrites the same temp output path
+    // every time -- release any file handle the player still holds on it
+    // from a previous A/B listen first, or the overwrite can fail on
+    // Windows (can't write to a file that's still open for playback).
+    audioPlayer.stop();
+
+    // Process immediately -- no save dialog up front. The result is
+    // written to a temp file (always writable, no permissions surprises);
+    // "Save As..." below copies it wherever you actually want it once you
+    // like what you hear, instead of forcing you to pick a destination
+    // before you even know if the run will be worth keeping.
+    auto outFile = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                       .getChildFile ("PS_" + inputFile.getFileNameWithoutExtension() + "_spotify_sim.wav");
+
+    auto target  = (SpotifyProcessor::Target)  targetControl.getSelectedIndex();
+    auto quality = (SpotifyProcessor::Quality) qualityControl.getSelectedIndex();
+
+    isProcessing = true;
+    processButton.setEnabled (false);
+    saveAsButton.setEnabled (false);
+    statusLabel.setText ("Processing...", juce::dontSendNotification);
+
+    auto inFile = inputFile;
+    std::thread worker ([this, inFile, outFile, target, quality]
+    {
+        SpotifyProcessor processor;
+        auto report = processor.process (inFile, outFile, target, quality);
+
+        juce::MessageManager::callAsync ([this, report, outFile]
+        {
+            isProcessing = false;
+            processButton.setEnabled (true);
+            showReport (report, outFile);
+        });
+    });
+    worker.detach();
+}
+
+void MainComponent::chooseSaveLocation()
+{
+    if (! lastOutputFile.existsAsFile())
+        return;
+
     fileChooser = std::make_unique<juce::FileChooser> (
         "Save the Spotify-simulated WAV as...",
         inputFile.getParentDirectory().getChildFile (inputFile.getFileNameWithoutExtension() + "_spotify_sim.wav"),
@@ -300,41 +370,27 @@ void MainComponent::runProcessing()
     fileChooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
         [this] (const juce::FileChooser& fc)
     {
-        auto outFile = fc.getResult();
-        if (outFile == juce::File {})
+        auto dest = fc.getResult();
+        if (dest == juce::File {})
             return;
 
-        auto target  = (SpotifyProcessor::Target)  targetControl.getSelectedIndex();
-        auto quality = (SpotifyProcessor::Quality) qualityControl.getSelectedIndex();
-
-        isProcessing = true;
-        processButton.setEnabled (false);
-        statusLabel.setText ("Processing...", juce::dontSendNotification);
-
-        auto inFile = inputFile;
-        std::thread worker ([this, inFile, outFile, target, quality]
-        {
-            SpotifyProcessor processor;
-            auto report = processor.process (inFile, outFile, target, quality);
-
-            juce::MessageManager::callAsync ([this, report, outFile]
-            {
-                isProcessing = false;
-                processButton.setEnabled (true);
-                showReport (report, outFile);
-            });
-        });
-        worker.detach();
+        if (lastOutputFile.copyFileTo (dest))
+            statusLabel.setText ("Saved to \"" + dest.getFileName() + "\".", juce::dontSendNotification);
+        else
+            statusLabel.setText ("Could not save to that location.", juce::dontSendNotification);
     });
 }
 
 void MainComponent::showReport (const SpotifyProcessor::Report& report, const juce::File& outFile)
 {
     resultsPanel.setReport (report);
-    statusLabel.setText (report.success ? "Done." : "Error.", juce::dontSendNotification);
 
     if (report.success)
     {
+        lastOutputFile = outFile;
+        saveAsButton.setEnabled (true);
+        statusLabel.setText ("Done - press \"Save As...\" to keep this result.", juce::dontSendNotification);
+
         // Level-match the original for a fair A/B comparison: play it
         // back with the same gain the processor applied.
         const float levelMatchGain = (float) std::pow (10.0, report.appliedGainDb / 20.0);
@@ -348,6 +404,9 @@ void MainComponent::showReport (const SpotifyProcessor::Report& report, const ju
     }
     else
     {
+        lastOutputFile = juce::File {};
+        saveAsButton.setEnabled (false);
+        statusLabel.setText ("Error.", juce::dontSendNotification);
         audioPlayer.reset();
         detailsPanel.clear();
         waveformDisplay.clear();

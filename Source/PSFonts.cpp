@@ -10,24 +10,28 @@ namespace PSFonts
         return juce::Typeface::createSystemTypefaceFor (data, (size_t) size);
     }
 
+    // JUCE's binary-data name mangling converts "." to "_" but strips
+    // hyphens outright rather than converting them to underscores -- so
+    // "Inter-Variable.ttf" becomes "InterVariable_ttf", not
+    // "Inter_Variable_ttf".
     static const juce::Typeface::Ptr& interTypeface()
     {
-        static juce::Typeface::Ptr tf = loadTypeface (PSBinaryData::Inter_Variable_ttf,
-                                                        PSBinaryData::Inter_Variable_ttfSize);
+        static juce::Typeface::Ptr tf = loadTypeface (PSBinaryData::InterVariable_ttf,
+                                                        PSBinaryData::InterVariable_ttfSize);
         return tf;
     }
 
     static const juce::Typeface::Ptr& monoRegularTypeface()
     {
-        static juce::Typeface::Ptr tf = loadTypeface (PSBinaryData::JetBrainsMono_Regular_ttf,
-                                                        PSBinaryData::JetBrainsMono_Regular_ttfSize);
+        static juce::Typeface::Ptr tf = loadTypeface (PSBinaryData::JetBrainsMonoRegular_ttf,
+                                                        PSBinaryData::JetBrainsMonoRegular_ttfSize);
         return tf;
     }
 
     static const juce::Typeface::Ptr& monoBoldTypeface()
     {
-        static juce::Typeface::Ptr tf = loadTypeface (PSBinaryData::JetBrainsMono_Bold_ttf,
-                                                        PSBinaryData::JetBrainsMono_Bold_ttfSize);
+        static juce::Typeface::Ptr tf = loadTypeface (PSBinaryData::JetBrainsMonoBold_ttf,
+                                                        PSBinaryData::JetBrainsMonoBold_ttfSize);
         return tf;
     }
 
